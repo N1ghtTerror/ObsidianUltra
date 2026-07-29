@@ -18,6 +18,14 @@ export type Scheme = {
     BackgroundImage: string,
 }
 
+--// One piece of the window footer. Copyable segments are highlighted in blue and
+--// get a copy button; CopyText overrides what lands on the clipboard.
+export type FooterSegment = {
+    Text: string,
+    Copyable: boolean?,
+    CopyText: string?,
+}
+
 export type Icon = {
     Url: string,
     ImageRectOffset: Vector2,
@@ -936,7 +944,7 @@ export type Window = {
     ) -> Dialog,
     ChangeTitle: (self: Window, Title: string) -> (),
     SetBackgroundImage: (self: Window, Image: string) -> (),
-    SetFooter: (self: Window, Footer: string) -> (),
+    SetFooter: (self: Window, Footer: string | { string | FooterSegment }) -> (),
     SetCornerRadius: (self: Window, Radius: number) -> (),
     SetAnimations: (
         self: Window,
@@ -1127,7 +1135,7 @@ export type Library = {
         self: Library,
         WindowInfo: {
             Title: string?,
-            Footer: string?,
+            Footer: (string | { string | FooterSegment })?,
             CopyableFooter: boolean?,
             Position: UDim2?,
             Size: UDim2?,

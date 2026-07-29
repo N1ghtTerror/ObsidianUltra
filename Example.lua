@@ -24,14 +24,26 @@ local Window = Library:CreateWindow({
 	-- but you do not need to define them unless you are changing them :)
 
 	Title = "mspaint",
-	Footer = "version: example",
 	Icon = 95816097006870,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
 
-	-- Highlights the footer in blue and lets you click it (or the copy button
-	-- next to it) to copy the text (Default value = true)
-	-- It falls back to the plain footer if the executor has no clipboard function
+	-- The footer can be a plain string, in which case CopyableFooter (default true)
+	-- decides whether the whole thing is copyable:
+	-- Footer = "version: example",
+
+	-- Or a list, to mix plain and copyable text. Bare strings are plain; a segment
+	-- is only copyable when it says so, and CopyText overrides what gets copied.
+	-- Copyable segments are highlighted in blue and get their own copy button.
+	Footer = {
+		"version: example |",
+		{ Text = "discord.gg/mspaint", Copyable = true },
+		"|",
+		{ Text = "user id", Copyable = true, CopyText = tostring(game.Players.LocalPlayer.UserId) },
+	},
+
+	-- Applies to the plain string form above (Default value = true)
+	-- Copying is disabled entirely if the executor has no clipboard function
 	CopyableFooter = true,
 })
 

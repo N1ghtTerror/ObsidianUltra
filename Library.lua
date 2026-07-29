@@ -8507,8 +8507,8 @@ function Library:CreateWindow(WindowInfo)
     local Container
     local BackgroundImage
     local BottomBackground
-    local FooterLabel
-    local FooterCopyButton
+    local FooterSegments = {}
+    local BuildFooter
     local TopBar
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
@@ -8804,8 +8804,7 @@ function Library:CreateWindow(WindowInfo)
         )
 
         --// Footer \\-
-        local IsFooterCopyable = WindowInfo.CopyableFooter and SetClipboard ~= nil
-
+        --// The footer is a row of segments; each one is plain or copyable
         local FooterHolder = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
@@ -8819,22 +8818,32 @@ function Library:CreateWindow(WindowInfo)
             Parent = FooterHolder,
         })
 
-        FooterLabel = New("TextLabel", {
-            AutomaticSize = Enum.AutomaticSize.X,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(0, 0, 1, 0),
-            Text = WindowInfo.Footer,
-            TextColor3 = IsFooterCopyable and "BlueColor" or "FontColor",
-            TextSize = 14,
-            TextTransparency = IsFooterCopyable and 0 or 0.5,
-            Parent = FooterHolder,
-        })
+        local function AddFooterSegment(Info)
+            local Text = tostring(Info.Text or "")
+            --// Copyable is opt in per segment, and impossible without a clipboard
+            local Copyable = Info.Copyable == true and SetClipboard ~= nil
 
-        if IsFooterCopyable then
+            local Label = New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 0, 1, 0),
+                Text = Text,
+                TextColor3 = Copyable and "BlueColor" or "FontColor",
+                TextSize = 14,
+                TextTransparency = Copyable and 0 or 0.5,
+                Parent = FooterHolder,
+            })
+            table.insert(FooterSegments, Label)
+
+            if not Copyable then
+                return Label
+            end
+
+            local CopyValue = tostring(Info.CopyText or Text)
             local CopyIcon = Library:GetIcon("copy")
             local CopiedIcon = Library:GetIcon("check")
 
-            FooterCopyButton = New("TextButton", {
+            local CopyButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
                 Size = UDim2.fromOffset(18, 18),
@@ -8845,7 +8854,7 @@ function Library:CreateWindow(WindowInfo)
                 Library.Corners,
                 New("UICorner", {
                     CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                    Parent = FooterCopyButton,
+                    Parent = CopyButton,
                 })
             )
             --// Keeps the glyph off the button's edges no matter the icon set
@@ -8854,7 +8863,7 @@ function Library:CreateWindow(WindowInfo)
                 PaddingLeft = UDim.new(0, 3),
                 PaddingRight = UDim.new(0, 3),
                 PaddingTop = UDim.new(0, 3),
-                Parent = FooterCopyButton,
+                Parent = CopyButton,
             })
 
             local CopyImage = New("ImageLabel", {
@@ -8864,14 +8873,14 @@ function Library:CreateWindow(WindowInfo)
                 ImageRectSize = CopyIcon and CopyIcon.ImageRectSize or Vector2.zero,
                 ScaleType = Enum.ScaleType.Fit,
                 Size = UDim2.fromScale(1, 1),
-                Parent = FooterCopyButton,
+                Parent = CopyButton,
             })
 
-            Library:AddTooltip("Copy to clipboard", nil, FooterCopyButton)
+            Library:AddTooltip("Copy to clipboard", nil, CopyButton)
 
             local ResetThread
             local function Copy()
-                local Success = pcall(SetClipboard, FooterLabel.Text)
+                local Success = pcall(SetClipboard, CopyValue)
                 if not Success then
                     return
                 end
@@ -8897,23 +8906,55 @@ function Library:CreateWindow(WindowInfo)
                 end)
             end
 
-            FooterCopyButton.MouseButton1Click:Connect(Copy)
-            FooterCopyButton.MouseEnter:Connect(function()
-                TweenService:Create(FooterCopyButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+            CopyButton.MouseButton1Click:Connect(Copy)
+            CopyButton.MouseEnter:Connect(function()
+                TweenService:Create(CopyButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
             end)
-            FooterCopyButton.MouseLeave:Connect(function()
-                TweenService:Create(FooterCopyButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+            CopyButton.MouseLeave:Connect(function()
+                TweenService:Create(CopyButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
             end)
 
             --// The text itself is a copy target too
-            local FooterTextButton = New("TextButton", {
+            local LabelButton = New("TextButton", {
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 1),
                 Text = "",
-                Parent = FooterLabel,
+                Parent = Label,
             })
-            FooterTextButton.MouseButton1Click:Connect(Copy)
+            LabelButton.MouseButton1Click:Connect(Copy)
+
+            table.insert(FooterSegments, CopyButton)
+            return Label
         end
+
+        --// Accepts a string, or a list of { Text, Copyable, CopyText } segments
+        function BuildFooter(Footer)
+            for _, Object in FooterSegments do
+                Object:Destroy()
+            end
+            table.clear(FooterSegments)
+
+            if typeof(Footer) == "string" then
+                --// One string: CopyableFooter decides whether all of it is copyable
+                AddFooterSegment({
+                    Text = Footer,
+                    Copyable = WindowInfo.CopyableFooter ~= false,
+                })
+
+                return
+            end
+
+            for _, Segment in Footer do
+                --// Bare strings in a list are plain text; opt in with Copyable = true
+                if typeof(Segment) == "string" then
+                    Segment = { Text = Segment, Copyable = false }
+                end
+
+                AddFooterSegment(Segment)
+            end
+        end
+
+        BuildFooter(WindowInfo.Footer)
 
         --// Resize Button \\--
         if WindowInfo.Resizable then
@@ -9062,10 +9103,14 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.BackgroundImage = Image
     end
 
-    function Window:SetFooter(Footer: string)
-        assert(typeof(Footer) == "string", "Expected string for footer got: " .. typeof(Footer))
+    --// A string, or a list of segments: { Text, Copyable, CopyText }
+    function Window:SetFooter(Footer: string | { any })
+        assert(
+            typeof(Footer) == "string" or typeof(Footer) == "table",
+            "Expected string or table for footer got: " .. typeof(Footer)
+        )
 
-        FooterLabel.Text = Footer
+        BuildFooter(Footer)
         WindowInfo.Footer = Footer
     end
 

@@ -113,26 +113,56 @@ The header was reworked and differs from upstream in ways that affect script aut
 
 ## Copyable footer
 
-The window footer is a copy target. Clicking either the footer text or the small copy
-button beside it writes the footer string to the clipboard, and the button's icon turns
-into a check for about 1.5 seconds as confirmation.
+The footer is a row of segments, and each segment is either plain text or a copy target.
+A copyable segment is drawn in `Library.Scheme.BlueColor` at full opacity so it reads as a
+link, and gets its own small copy button; clicking the text or the button writes that
+segment to the clipboard and flips the icon to a check for about 1.5 seconds. Plain
+segments keep the usual 50% faded white.
+
+### A single string
+
+`Footer` accepts a plain string, and `CopyableFooter` (default `true`) decides whether the
+whole thing is copyable:
 
 ```lua
-local Window = Library:CreateWindow({
-    Title = "mspaint",
+Library:CreateWindow({
     Footer = "version: example",
-    CopyableFooter = true,   -- default; false restores the plain grey footer
+    CopyableFooter = true,   -- false gives the plain grey footer
 })
-
-Window:SetFooter("build 1.2.3")   -- unchanged; the new text is what gets copied
 ```
 
-- When copyable, the footer text is drawn in `Library.Scheme.BlueColor` at full opacity so
-  it reads as a link, instead of the usual 50% faded white.
+### Mixed plain and copyable text
+
+Pass a list instead. **Bare strings are plain text**, and a table segment is only copyable
+when it says `Copyable = true` — copyability is opt in per segment, and `CopyableFooter`
+does not apply to this form:
+
+```lua
+Library:CreateWindow({
+    Footer = {
+        "version: example |",                                   -- plain
+        { Text = "discord.gg/mspaint", Copyable = true },        -- blue + copy button
+        "|",
+        { Text = "user id", Copyable = true, CopyText = "123" }, -- copies CopyText
+    },
+})
+```
+
+Segment fields: `Text` (shown), `Copyable` (defaults to `false` in list form), `CopyText`
+(what lands on the clipboard, defaults to `Text` — use it when the label should not be the
+copied value).
+
+Segments are laid out in a centered horizontal row with 6px between them, so put any
+separators (`"|"`, `"-"`) in as their own plain segments.
+
+### Runtime and caveats
+
+- `Window:SetFooter(Footer)` takes either form and rebuilds the row, replacing whatever was
+  there. It used to accept only a string.
 - The clipboard writer is resolved once at load as
   `setclipboard or toclipboard or syn.write_clipboard`. If the executor exposes none of
-  them, the copy button is not created and the footer renders plain and grey — so do not
-  assume the button exists.
+  them, every segment falls back to plain text and no copy buttons are created — do not
+  assume they exist.
 
 ### Scheme.BlueColor
 
