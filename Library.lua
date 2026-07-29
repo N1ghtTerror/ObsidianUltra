@@ -207,6 +207,8 @@ local Library = {
     --// Corners \\--
     Corners = {},
     SpecificCorners = {},
+    --// Stay fully rounded, but square off with everything else at radius 0
+    PillCorners = {},
 
     --// Animations \\--
     TweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -1834,6 +1836,7 @@ end
 local TransparencyCache = {}
 local ActiveTabTweens = setmetatable({}, { __mode = "k" })
 local SUBTAB_BAR_HEIGHT = 32
+local SUBTAB_IDLE_TRANSPARENCY = 0.4
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -8718,11 +8721,14 @@ function Library:CreateWindow(WindowInfo)
             FlexMode = Enum.UIFlexMode.Shrink,
             Parent = SearchBox,
         })
-        --// Deliberately not in Library.Corners: this one stays a pill
-        New("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = SearchBox,
-        })
+        --// A pill at any radius, but square when the radius is 0
+        table.insert(
+            Library.PillCorners,
+            New("UICorner", {
+                CornerRadius = WindowInfo.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
+                Parent = SearchBox,
+            })
+        )
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 6),
             PaddingLeft = UDim.new(0, SEARCHBOX_TEXT_INSET),
@@ -9077,6 +9083,10 @@ function Library:CreateWindow(WindowInfo)
             else
                 UICorner.CornerRadius = RadiusUDim
             end
+        end
+
+        for _, UICorner in Library.PillCorners do
+            UICorner.CornerRadius = Radius > 0 and UDim.new(1, 0) or UDim.new(0, 0)
         end
 
         for _, UICorner in Library.SpecificCorners do
@@ -10290,7 +10300,10 @@ function Library:CreateWindow(WindowInfo)
             --// Button \\--
             local Button = New("TextButton", {
                 AutomaticSize = Enum.AutomaticSize.X,
-                BackgroundColor3 = "MainColor",
+                --// Lighter than MainColor so the active pill separates from the tab
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.MainColor, 10)
+                end,
                 BackgroundTransparency = 1,
                 Size = UDim2.fromOffset(0, SUBTAB_BAR_HEIGHT - 8),
                 Text = "",
@@ -10336,10 +10349,28 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromOffset(0, 16),
                 Text = SubName,
                 TextSize = 15,
-                TextTransparency = 0.5,
+                TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
                 TextXAlignment = Enum.TextXAlignment.Center,
                 Parent = Button,
             })
+
+            --// Accent bar under the active button, so the state reads at a glance
+            local Underline = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 1),
+                BackgroundColor3 = "AccentColor",
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                Position = UDim2.new(0.5, 0, 1, 3),
+                Size = UDim2.new(1, -10, 0, 2),
+                Parent = Button,
+            })
+            table.insert(
+                Library.PillCorners,
+                New("UICorner", {
+                    CornerRadius = WindowInfo.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
+                    Parent = Underline,
+                })
+            )
 
             --// Content \\--
             local SubCanvas = New("CanvasGroup", {
@@ -10443,14 +10474,14 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 TweenService:Create(Button, Library.TweenInfo, {
-                    BackgroundTransparency = Hovering and 0.6 or 1,
+                    BackgroundTransparency = Hovering and 0.45 or 1,
                 }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
-                    TextTransparency = Hovering and 0.25 or 0.5,
+                    TextTransparency = Hovering and 0.1 or SUBTAB_IDLE_TRANSPARENCY,
                 }):Play()
                 if ButtonIcon then
                     TweenService:Create(ButtonIcon, Library.TweenInfo, {
-                        ImageTransparency = Hovering and 0.25 or 0.5,
+                        ImageTransparency = Hovering and 0.1 or SUBTAB_IDLE_TRANSPARENCY,
                     }):Play()
                 end
             end
@@ -10478,6 +10509,9 @@ function Library:CreateWindow(WindowInfo)
                         ImageTransparency = 0,
                     }):Play()
                 end
+                TweenService:Create(Underline, Library.TweenInfo, {
+                    BackgroundTransparency = 0,
+                }):Play()
 
                 Tab.ActiveSubTab = SubTab
                 SubTab:RefreshSides()
@@ -10496,13 +10530,16 @@ function Library:CreateWindow(WindowInfo)
                     BackgroundTransparency = 1,
                 }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
-                    TextTransparency = 0.5,
+                    TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
                 }):Play()
                 if ButtonIcon then
                     TweenService:Create(ButtonIcon, Library.TweenInfo, {
-                        ImageTransparency = 0.5,
+                        ImageTransparency = SUBTAB_IDLE_TRANSPARENCY,
                     }):Play()
                 end
+                TweenService:Create(Underline, Library.TweenInfo, {
+                    BackgroundTransparency = 1,
+                }):Play()
 
                 Library:PlayTabAnimation(SubCanvas, false)
 
@@ -12590,6 +12627,7 @@ function Library:Unload()
 
     table.clear(Library.Corners)
     table.clear(Library.SpecificCorners)
+    table.clear(Library.PillCorners)
 
     table.clear(Library.Notifications)
     table.clear(Library.Dialogues)
