@@ -82,6 +82,9 @@ local Tab2 = TabBox:AddTab("Tab 2")
 -- groupboxes, tabboxes, dependency boxes, search, etc.
 local SubTabsTab = Tabs["Sub Tabs"]
 
+-- The sub tab row is centered by default; "Left" and "Right" also work
+SubTabsTab:SetSubTabAlignment("Center")
+
 local PvPSubTab = SubTabsTab:AddSubTab("PvP")
 local ParrySubTab = SubTabsTab:AddSubTab("Parry")
 -- Sub tabs accept the same table form as Window:AddTab, and can have an icon

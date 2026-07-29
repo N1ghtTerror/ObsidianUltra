@@ -1829,7 +1829,7 @@ end
 --// Animations \\--
 local TransparencyCache = {}
 local ActiveTabTweens = setmetatable({}, { __mode = "k" })
-local SUBTAB_BAR_HEIGHT = 30
+local SUBTAB_BAR_HEIGHT = 32
 
 function Library:PlayTabAnimation(TabCanvas: CanvasGroup, Showing: boolean, OnComplete: (() -> ())?)
     if not TabCanvas then
@@ -10111,6 +10111,8 @@ function Library:CreateWindow(WindowInfo)
 
         --// Sub Tabs \\--
         local SubTabBar
+        local SubTabBarLayout
+        local SubTabAlignment = "Center"
 
         local function CreateSubTabBar()
             if SubTabBar then
@@ -10124,18 +10126,12 @@ function Library:CreateWindow(WindowInfo)
                 ZIndex = 2,
                 Parent = TabContainer,
             })
-            New("UIListLayout", {
+            SubTabBarLayout = New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
-                HorizontalAlignment = Enum.HorizontalAlignment.Right,
+                HorizontalAlignment = Enum.HorizontalAlignment[SubTabAlignment],
                 VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 18),
+                Padding = UDim.new(0, 6),
                 Parent = SubTabBar,
-            })
-
-            Library:MakeLine(SubTabBar, {
-                AnchorPoint = Vector2.new(0, 1),
-                Position = UDim2.fromScale(0, 1),
-                Size = UDim2.new(1, 0, 0, 1),
             })
 
             --// The parent tab acts purely as a host once sub tabs exist
@@ -10145,11 +10141,21 @@ function Library:CreateWindow(WindowInfo)
             Tab:RefreshSides()
         end
 
+        --// "Left" | "Center" | "Right"
+        function Tab:SetSubTabAlignment(Alignment: string)
+            assert(Enum.HorizontalAlignment[Alignment], "Alignment must be Left, Center or Right.")
+
+            SubTabAlignment = Alignment
+            if SubTabBarLayout then
+                SubTabBarLayout.HorizontalAlignment = Enum.HorizontalAlignment[Alignment]
+            end
+        end
+
         function Tab:GetContentOffset()
             local Offset = WarningBoxHolder.Visible and WarningBox.Size.Y.Offset + 8 or 0
             if SubTabBar then
                 SubTabBar.Position = UDim2.new(0, 2, 0, Offset)
-                Offset += SUBTAB_BAR_HEIGHT + 4
+                Offset += SUBTAB_BAR_HEIGHT + 6
             end
 
             return Offset
@@ -10175,26 +10181,30 @@ function Library:CreateWindow(WindowInfo)
             --// Button \\--
             local Button = New("TextButton", {
                 AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(0, SUBTAB_BAR_HEIGHT - 6),
+                Size = UDim2.fromOffset(0, SUBTAB_BAR_HEIGHT - 8),
                 Text = "",
                 Parent = SubTabBar,
             })
-
-            local ButtonContent = New("Frame", {
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                AutomaticSize = Enum.AutomaticSize.X,
-                BackgroundTransparency = 1,
-                Position = UDim2.fromScale(0.5, 0.5),
-                Size = UDim2.fromOffset(0, 18),
-                Parent = Button,
-            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = Button,
+                })
+            )
             New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
                 HorizontalAlignment = Enum.HorizontalAlignment.Center,
                 VerticalAlignment = Enum.VerticalAlignment.Center,
                 Padding = UDim.new(0, 6),
-                Parent = ButtonContent,
+                Parent = Button,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12),
+                Parent = Button,
             })
 
             local ButtonIcon
@@ -10205,28 +10215,20 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectOffset = SubIcon.ImageRectOffset,
                     ImageRectSize = SubIcon.ImageRectSize,
                     ImageTransparency = 0.5,
+                    ScaleType = Enum.ScaleType.Fit,
                     Size = UDim2.fromOffset(16, 16),
-                    Parent = ButtonContent,
+                    Parent = Button,
                 })
             end
 
             local ButtonLabel = New("TextLabel", {
                 AutomaticSize = Enum.AutomaticSize.X,
                 BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(0, 18),
+                Size = UDim2.fromOffset(0, 16),
                 Text = SubName,
-                TextSize = 16,
+                TextSize = 15,
                 TextTransparency = 0.5,
-                Parent = ButtonContent,
-            })
-
-            local Underline = New("Frame", {
-                AnchorPoint = Vector2.new(0.5, 1),
-                BackgroundColor3 = "AccentColor",
-                BorderSizePixel = 0,
-                Position = UDim2.new(0.5, 0, 1, 3),
-                Size = UDim2.new(1, 0, 0, 1),
-                Visible = false,
+                TextXAlignment = Enum.TextXAlignment.Center,
                 Parent = Button,
             })
 
@@ -10331,6 +10333,9 @@ function Library:CreateWindow(WindowInfo)
                     return
                 end
 
+                TweenService:Create(Button, Library.TweenInfo, {
+                    BackgroundTransparency = Hovering and 0.6 or 1,
+                }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = Hovering and 0.25 or 0.5,
                 }):Play()
@@ -10353,6 +10358,9 @@ function Library:CreateWindow(WindowInfo)
                 Library:AddToRegistry(ButtonLabel, { TextColor3 = "AccentColor" })
                 ButtonLabel.TextColor3 = Library.Scheme.AccentColor
 
+                TweenService:Create(Button, Library.TweenInfo, {
+                    BackgroundTransparency = 0,
+                }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = 0,
                 }):Play()
@@ -10361,7 +10369,6 @@ function Library:CreateWindow(WindowInfo)
                         ImageTransparency = 0,
                     }):Play()
                 end
-                Underline.Visible = true
 
                 Tab.ActiveSubTab = SubTab
                 SubTab:RefreshSides()
@@ -10376,6 +10383,9 @@ function Library:CreateWindow(WindowInfo)
                 Library:AddToRegistry(ButtonLabel, { TextColor3 = "FontColor" })
                 ButtonLabel.TextColor3 = Library.Scheme.FontColor
 
+                TweenService:Create(Button, Library.TweenInfo, {
+                    BackgroundTransparency = 1,
+                }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = 0.5,
                 }):Play()
@@ -10384,7 +10394,6 @@ function Library:CreateWindow(WindowInfo)
                         ImageTransparency = 0.5,
                     }):Play()
                 end
-                Underline.Visible = false
 
                 Library:PlayTabAnimation(SubCanvas, false)
 

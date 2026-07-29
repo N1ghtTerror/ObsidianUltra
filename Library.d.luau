@@ -798,6 +798,7 @@ export type Tab = {
     AddLeftTabbox: (self: Tab, Name: string?) -> Tabbox,
     AddRightTabbox: (self: Tab, Name: string?) -> Tabbox,
     AddSubTab: (self: Tab, Info: { Name: string, Icon: string? } | string, Icon: string?) -> NestedTab,
+    SetSubTabAlignment: (self: Tab, Alignment: "Left" | "Center" | "Right") -> (),
     GetContentOffset: (self: Tab) -> number,
     RefreshSides: (self: Tab) -> (),
     Hover: (self: Tab, Hovering: boolean) -> (),
