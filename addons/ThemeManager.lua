@@ -411,7 +411,7 @@ function ThemeManager:SetDefaultTheme(Theme: any)
     end
 
     --// Default Scheme Colors
-    for _, DefaultSchemeColor in { "RedColor", "DestructiveColor", "DarkColor", "WhiteColor" } do
+    for _, DefaultSchemeColor in { "RedColor", "BlueColor", "DestructiveColor", "DarkColor", "WhiteColor" } do
         LibraryScheme[DefaultSchemeColor] = Library.Scheme[DefaultSchemeColor]
     end
 

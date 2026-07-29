@@ -11,6 +11,7 @@ export type Scheme = {
     FontColor: Color3,
     Font: Font,
     RedColor: Color3,
+    BlueColor: Color3,
     DestructiveColor: Color3,
     DarkColor: Color3,
     WhiteColor: Color3,
@@ -902,8 +903,6 @@ export type Dialog = {
 
 export type Window = {
     IsSidebarCompacted: (self: Window) -> boolean,
-    SetSidebarStyle: (self: Window, Style: "Default" | "Rail") -> (),
-    GetSidebarStyle: (self: Window) -> "Default" | "Rail",
     GetSidebarWidth: (self: Window) -> number,
     SetSidebarWidth: (self: Window, Width: number) -> (),
     SetCompact: (self: Window, State: boolean) -> (),
@@ -1130,7 +1129,6 @@ export type Library = {
             Title: string?,
             Footer: string?,
             CopyableFooter: boolean?,
-            SidebarStyle: ("Default" | "Rail")?,
             Position: UDim2?,
             Size: UDim2?,
             Icon: string?,
