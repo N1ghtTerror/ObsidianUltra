@@ -3,9 +3,17 @@
 -- You can suggest changes with a pull request or something
 
 local repo = "https://raw.githubusercontent.com/joustingmatch/ObsidianUltra/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+-- raw.githubusercontent caches files for a few minutes, so a fresh push can keep
+-- serving the old source. The query string is ignored by the server but not by
+-- the CDN, which means you always get the latest commit while developing.
+local function Fetch(Path: string)
+	return loadstring(game:HttpGet(`{repo}{Path}?v={os.time()}`))()
+end
+
+local Library = Fetch("Library.lua")
+local ThemeManager = Fetch("addons/ThemeManager.lua")
+local SaveManager = Fetch("addons/SaveManager.lua")
 
 local Options = Library.Options
 local Toggles = Library.Toggles
