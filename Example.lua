@@ -44,10 +44,11 @@ local Window = Library:CreateWindow({
 -- You can find more icons in https://lucide.dev/
 local Tabs = {
 	-- Creates a new tab titled Main
-	Main = Window:AddTab("Main", "user"),
+	-- The Description shows under the tab name in the header
+	Main = Window:AddTab({ Name = "Main", Icon = "user", Description = "Main features" }),
 	Key = Window:AddKeyTab("Key System"),
-	["Sub Tabs"] = Window:AddTab("Sub Tabs", "layers"),
-	["UI Settings"] = Window:AddTab("UI Settings", "settings"),
+	["Sub Tabs"] = Window:AddTab({ Name = "Sub Tabs", Icon = "layers", Description = "Tabs inside a tab" }),
+	["UI Settings"] = Window:AddTab({ Name = "UI Settings", Icon = "settings", Description = "Configure the menu" }),
 }
 
 

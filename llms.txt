@@ -88,6 +88,25 @@ Combat:SetSubTabAlignment("Left")   -- "Left" | "Center" | "Right"
   active sub tab's sides when there is one, otherwise the active tab's. Prefer this over
   `Library.ActiveTab.Sides`, which is wrong whenever sub tabs are in use.
 
+## Header
+
+The header was reworked and differs from upstream in ways that affect script authors:
+
+- **The open tab is always named in the header.** Upstream only showed the header tab info
+  when a tab was given a `Description`; here the bold tab name is always shown, with the
+  description as a smaller faded second line when there is one. Give tabs a `Description`
+  to fill that second line:
+  `Window:AddTab({ Name = "Main", Icon = "user", Description = "Main features" })`
+- `Window:ShowTabInfo(Name, Description)` accepts a `nil`/empty description and hides the
+  second line instead of leaving a blank one.
+- **The search box is a pill** (fully rounded, icon inset on the left, placeholder
+  `"Search..."`). Its corner radius is intentionally not registered in `Library.Corners`,
+  so `Window:SetCornerRadius` does not square it off.
+- `SearchbarSize` now defaults to `UDim2.fromScale(0.35, 1)` rather than
+  `UDim2.fromScale(1, 1)`, and the box no longer resizes itself when tab info appears —
+  the tab info grows to fill whatever the search box does not use. Pass your own
+  `SearchbarSize` to override.
+
 ## Copyable footer
 
 The window footer is a copy target. Clicking either the footer text or the small copy

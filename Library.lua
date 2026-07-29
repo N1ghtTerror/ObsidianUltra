@@ -368,7 +368,7 @@ local Templates = {
         Center = true,
         Resizable = true,
 
-        SearchbarSize = UDim2.fromScale(1, 1),
+        SearchbarSize = UDim2.fromScale(0.35, 1),
         GlobalSearch = false,
 
         CornerRadius = 4,
@@ -1834,6 +1834,9 @@ end
 local TransparencyCache = {}
 local ActiveTabTweens = setmetatable({}, { __mode = "k" })
 local SUBTAB_BAR_HEIGHT = 32
+
+--// Left padding of the search box text, leaving room for the icon
+local SEARCHBOX_TEXT_INSET = 38
 
 function Library:PlayTabAnimation(TabCanvas: CanvasGroup, Showing: boolean, OnComplete: (() -> ())?)
     if not TabCanvas then
@@ -8486,7 +8489,6 @@ function Library:CreateWindow(WindowInfo)
     Library.TabSwipeOffset = math.max(1, WindowInfo.TabSwipeOffset or 26)
     Library.TabSwipeFrom = WindowInfo.TabSwipeFrom or "right"
 
-    local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
     local DividerLine
     local TitleHolder
@@ -8654,6 +8656,7 @@ function Library:CreateWindow(WindowInfo)
             Parent = RightWrapper,
         })
 
+        --// Current Tab: name stacked over its description \\--
         CurrentTabInfo = New("Frame", {
             Size = UDim2.fromScale(WindowInfo.DisableSearch and 1 or 0.5, 1),
             Visible = false,
@@ -8674,10 +8677,8 @@ function Library:CreateWindow(WindowInfo)
         })
 
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 8),
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
-            PaddingTop = UDim.new(0, 8),
+            PaddingLeft = UDim.new(0, 12),
+            PaddingRight = UDim.new(0, 12),
             Parent = CurrentTabInfo,
         })
 
@@ -8686,7 +8687,7 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.fromScale(1, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             Text = "",
-            TextSize = 14,
+            TextSize = 17,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = CurrentTabInfo,
         })
@@ -8699,15 +8700,17 @@ function Library:CreateWindow(WindowInfo)
             TextWrapped = true,
             TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Left,
-            TextTransparency = 0.5,
+            TextTransparency = 0.45,
             Parent = CurrentTabInfo,
         })
 
+        --// Search: a pill with the icon inside, on the right \\--
         SearchBox = New("TextBox", {
             BackgroundColor3 = "MainColor",
-            PlaceholderText = "Search",
+            PlaceholderText = "Search...",
             Size = WindowInfo.SearchbarSize,
-            TextScaled = true,
+            TextSize = 15,
+            TextXAlignment = Enum.TextXAlignment.Left,
             Visible = not (WindowInfo.DisableSearch or false),
             Parent = RightWrapper,
         })
@@ -8715,18 +8718,16 @@ function Library:CreateWindow(WindowInfo)
             FlexMode = Enum.UIFlexMode.Shrink,
             Parent = SearchBox,
         })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = SearchBox,
-            })
-        )
+        --// Deliberately not in Library.Corners: this one stays a pill
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = SearchBox,
+        })
         New("UIPadding", {
-            PaddingBottom = UDim.new(0, 8),
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
-            PaddingTop = UDim.new(0, 8),
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, SEARCHBOX_TEXT_INSET),
+            PaddingRight = UDim.new(0, 14),
+            PaddingTop = UDim.new(0, 6),
             Parent = SearchBox,
         })
         New("UIStroke", {
@@ -8737,13 +8738,16 @@ function Library:CreateWindow(WindowInfo)
         local SearchIcon = Library:GetIcon("search")
         if SearchIcon then
             New("ImageLabel", {
+                AnchorPoint = Vector2.new(0, 0.5),
                 Image = SearchIcon.Url,
                 ImageColor3 = "FontColor",
                 ImageRectOffset = SearchIcon.ImageRectOffset,
                 ImageRectSize = SearchIcon.ImageRectSize,
-                ImageTransparency = 0.5,
-                Size = UDim2.fromScale(1, 1),
-                SizeConstraint = Enum.SizeConstraint.RelativeYY,
+                ImageTransparency = 0.4,
+                --// Sits in the padding the text was pushed out of
+                Position = UDim2.new(0, -(SEARCHBOX_TEXT_INSET - 14), 0.5, 0),
+                ScaleType = Enum.ScaleType.Fit,
+                Size = UDim2.fromOffset(16, 16),
                 Parent = SearchBox,
             })
         end
@@ -9187,20 +9191,18 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Window:ShowTabInfo(Name, Description)
-        CurrentTabLabel.Text = Name
-        CurrentTabDescription.Text = Description
+        --// RichText is on by default, so the name can carry its own weight
+        CurrentTabLabel.Text = `<b>{Name}</b>`
 
-        if IsDefaultSearchbarSize then
-            SearchBox.Size = UDim2.fromScale(0.5, 1)
-        end
+        Description = Description or ""
+        CurrentTabDescription.Text = Description
+        CurrentTabDescription.Visible = Description ~= ""
+
         CurrentTabInfo.Visible = true
     end
 
     function Window:HideTabInfo()
         CurrentTabInfo.Visible = false
-        if IsDefaultSearchbarSize then
-            SearchBox.Size = UDim2.fromScale(1, 1)
-        end
     end
 
     function Window:AddTab(...)
@@ -10619,9 +10621,8 @@ function Library:CreateWindow(WindowInfo)
                 }):Play()
             end
 
-            if Description then
-                Window:ShowTabInfo(Name, Description)
-            end
+            --// The header always names the open tab; the description is optional
+            Window:ShowTabInfo(Name, Description)
 
             Library:PlayTabAnimation(TabCanvas, true)
             Tab:RefreshSides()
@@ -10987,9 +10988,8 @@ function Library:CreateWindow(WindowInfo)
 
             Library:PlayTabAnimation(TabCanvas, true)
 
-            if Description then
-                Window:ShowTabInfo(Name, Description)
-            end
+            --// The header always names the open tab; the description is optional
+            Window:ShowTabInfo(Name, Description)
 
             Tab:RefreshSides()
 
