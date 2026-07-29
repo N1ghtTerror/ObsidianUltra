@@ -1,0 +1,122 @@
+# ObsidianUltra
+
+> A fork of the Obsidian UI library (deividcomsono/Obsidian) for Roblox exploit scripts.
+> Everything from upstream Obsidian works unchanged; this file documents only what this
+> fork adds, because an LLM that knows upstream Obsidian will not know about these.
+
+Load it the same way as upstream, but from this repo:
+
+```lua
+local repo = "https://raw.githubusercontent.com/joustingmatch/ObsidianUltra/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+```
+
+Types for both features live in `Library.d.luau`; `Example.lua` has runnable usage.
+
+## Sub tabs (tabs inside a tab)
+
+A sub tab is a second level of tabs *inside* one sidebar tab. They render as a row of
+buttons across the top of the tab's content area, above the groupboxes. This is not the
+same thing as a **Tabbox** — a Tabbox is a small tabbed widget that lives inside one
+column, while a sub tab owns the entire content area and has its own left and right
+columns.
+
+### Creating them
+
+```lua
+local Combat = Window:AddTab("Combat", "swords")
+
+local PvP = Combat:AddSubTab("PvP")                                 -- name, icon
+local Parry = Combat:AddSubTab("Parry", "shield")
+local Builder = Combat:AddSubTab({ Name = "Builder", Icon = "wrench" })  -- table form
+```
+
+`Tab:AddSubTab` accepts either `(Name: string, Icon: string?)` or a
+`{ Name: string, Icon: string? }` table, mirroring `Window:AddTab`. The icon is optional
+and resolves through the same lucide lookup as everywhere else.
+
+### What a sub tab supports
+
+A sub tab is tab-like: it has its own `Sides` (left and right `ScrollingFrame`s), so every
+container method a tab has works on it, and the elements inside behave identically.
+
+```lua
+PvP:AddLeftGroupbox("Aiming", "crosshair"):AddToggle("SilentAim", { Text = "Silent Aim" })
+PvP:AddRightGroupbox("Targeting"):AddDropdown("HitPart", { Values = { "Head" }, Default = 1 })
+
+local Box = Builder:AddLeftTabbox("Animation Builder")   -- tabboxes nest inside sub tabs
+Box:AddTab("Timings"):AddToggle("Preview", { Text = "Preview" })
+```
+
+Available on a sub tab: `AddGroupbox`, `AddLeftGroupbox`, `AddRightGroupbox`, `AddTabbox`,
+`AddLeftTabbox`, `AddRightTabbox`, `Show`, `Hide`, `SetVisible`, `Hover`, `Resize`,
+`RefreshSides`, `Destroy`.
+
+Fields: `Type` (`"SubTab"`), `Name`, `Window`, `Tab` (the parent tab), `Canvas`, `Button`,
+`Sides`, `Groupboxes`, `Tabboxes`, `DependencyGroupboxes`.
+
+### Alignment
+
+The button row is centered by default:
+
+```lua
+Combat:SetSubTabAlignment("Left")   -- "Left" | "Center" | "Right"
+```
+
+### Behaviour worth knowing
+
+- **The parent tab becomes a host.** The moment a tab gets its first sub tab, that tab's
+  own left/right columns are hidden. Put your groupboxes on the sub tabs, not on the
+  parent tab — anything already added to the parent will disappear from view.
+- The first sub tab added is shown automatically. `SubTab:Show()` switches to one;
+  switching reuses the window's tab transition animation settings.
+- `SubTab:SetVisible(false)` hides its button and, if it was active, falls through to
+  another visible sub tab.
+- Search works across sub tabs. Sub tabs whose elements do not match the query have their
+  buttons hidden, and if the active sub tab has no matches the search jumps to one that
+  does.
+- Warning boxes still belong to the parent tab (`Tab:UpdateWarningBox`), and the sub tab
+  content is offset below both the warning box and the button row.
+
+### Related tab members
+
+- `Tab.SubTabs` — `{ [Name]: SubTab }`
+- `Tab.ActiveSubTab` — the visible sub tab, or `nil`
+- `Tab:GetContentOffset()` — pixels reserved at the top of the tab by the warning box and
+  the sub tab row
+- `Library:GetActiveSides()` — the `ScrollingFrame`s currently on screen; returns the
+  active sub tab's sides when there is one, otherwise the active tab's. Prefer this over
+  `Library.ActiveTab.Sides`, which is wrong whenever sub tabs are in use.
+
+## Copyable footer
+
+The window footer is a copy target. Clicking either the footer text or the small copy
+button beside it writes the footer string to the clipboard, and the button's icon turns
+into a check for about 1.5 seconds as confirmation.
+
+```lua
+local Window = Library:CreateWindow({
+    Title = "mspaint",
+    Footer = "version: example",
+    CopyableFooter = true,   -- default; false restores the plain grey footer
+})
+
+Window:SetFooter("build 1.2.3")   -- unchanged; the new text is what gets copied
+```
+
+- When copyable, the footer text is drawn in `Library.Scheme.BlueColor` at full opacity so
+  it reads as a link, instead of the usual 50% faded white.
+- The clipboard writer is resolved once at load as
+  `setclipboard or toclipboard or syn.write_clipboard`. If the executor exposes none of
+  them, the copy button is not created and the footer renders plain and grey — so do not
+  assume the button exists.
+
+### Scheme.BlueColor
+
+This fork adds one scheme colour, used for the footer highlight and available to your own
+elements:
+
+- `Library.Scheme.BlueColor`, default `Color3.fromRGB(80, 155, 255)`
+- Alias `"Blue"` — any property that accepts a scheme string accepts `"Blue"` or
+  `"BlueColor"`, and it re-colours automatically when the theme changes
+- `ThemeManager` preserves it across theme swaps, like `RedColor` and `DarkColor`
