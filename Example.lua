@@ -41,6 +41,7 @@ local Tabs = {
 	-- Creates a new tab titled Main
 	Main = Window:AddTab("Main", "user"),
 	Key = Window:AddKeyTab("Key System"),
+	["Sub Tabs"] = Window:AddTab("Sub Tabs", "layers"),
 	["UI Settings"] = Window:AddTab("UI Settings", "settings"),
 }
 
@@ -75,6 +76,48 @@ local Tab2 = TabBox:AddTab("Tab 2")
 
 -- You can now call AddToggle, etc on the tabs you added to the Tabbox
 ]]
+
+-- Sub Tabs (tabs inside a tab) show up as a button row above the tab's content.
+-- Every sub tab gets its own left/right sides, so it supports everything a tab does:
+-- groupboxes, tabboxes, dependency boxes, search, etc.
+local SubTabsTab = Tabs["Sub Tabs"]
+
+local PvPSubTab = SubTabsTab:AddSubTab("PvP")
+local ParrySubTab = SubTabsTab:AddSubTab("Parry")
+-- Sub tabs accept the same table form as Window:AddTab, and can have an icon
+local BuilderSubTab = SubTabsTab:AddSubTab({ Name = "Builder", Icon = "wrench" })
+
+do
+	local PvPBox = PvPSubTab:AddLeftGroupbox("Aiming", "crosshair")
+	PvPBox:AddToggle("SubPvPAim", { Text = "Silent Aim", Default = true })
+	PvPBox:AddSlider("SubPvPFov", { Text = "FOV", Default = 90, Min = 0, Max = 360, Rounding = 0, Suffix = "°" })
+
+	PvPSubTab:AddRightGroupbox("Targeting", "target"):AddDropdown("SubPvPPart", {
+		Values = { "Head", "HumanoidRootPart", "Torso" },
+		Default = 1,
+		Text = "Hit Part",
+	})
+
+	local ParryBox = ParrySubTab:AddLeftGroupbox("Timings", "timer")
+	ParryBox:AddToggle("SubParryEnabled", { Text = "Auto Parry" })
+	ParryBox:AddSlider("SubParryDelay", { Text = "Parry Delay", Default = 0, Min = 0, Max = 500, Rounding = 0, Suffix = "ms" })
+
+	-- Tabboxes work inside a sub tab too
+	local BuilderBox = BuilderSubTab:AddLeftTabbox("Animation Builder")
+
+	local BuilderMain = BuilderBox:AddTab("Timings")
+	BuilderMain:AddInput("SubBuilderId", { Text = "Animation ID", Placeholder = "rbxassetid://" })
+	BuilderMain:AddToggle("SubBuilderPreview", { Text = "Preview Animation" })
+
+	local BuilderExtra = BuilderBox:AddTab("Export")
+	BuilderExtra:AddButton({ Text = "Create Timing", Func = function() end })
+
+	BuilderSubTab:AddRightGroupbox("Logger", "scroll-text"):AddToggle("SubBuilderLogger", { Text = "Show Logger" })
+end
+
+-- Switching / hiding sub tabs from code:
+-- ParrySubTab:Show()
+-- ParrySubTab:SetVisible(false)
 
 -- Groupbox:AddToggle
 -- Arguments: Index, Options

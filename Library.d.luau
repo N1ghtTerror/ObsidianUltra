@@ -698,11 +698,67 @@ export type Tabbox = {
     AddTab: (self: Tabbox, Name: string, IconName: string?) -> (SubTab, number),
 }
 
+--// A tab nested inside a Tab, shown as a row of buttons above the content
+export type NestedTab = {
+    Type: "SubTab",
+    Name: string,
+    Window: Window,
+    Tab: Tab,
+    Canvas: CanvasGroup,
+    Button: TextButton,
+    Sides: { ScrollingFrame },
+    Groupboxes: { [string]: Groupbox },
+    Tabboxes: { [string]: Tabbox },
+    DependencyGroupboxes: { [number]: DependencyGroupbox },
+
+    AddGroupbox: (
+        self: NestedTab,
+        Info: {
+            Side: number,
+            Name: string,
+            IconName: string?,
+            Visible: boolean?,
+            Collapsed: boolean?,
+            DisableCollapsing: boolean?,
+        }
+    ) -> Groupbox,
+    AddLeftGroupbox: (
+        self: NestedTab,
+        Name: string,
+        IconName: string?,
+        Visible: boolean?,
+        Collapsed: boolean?,
+        DisableCollapsing: boolean?
+    ) -> Groupbox,
+    AddRightGroupbox: (
+        self: NestedTab,
+        Name: string,
+        IconName: string?,
+        Visible: boolean?,
+        Collapsed: boolean?,
+        DisableCollapsing: boolean?
+    ) -> Groupbox,
+    AddTabbox: (self: NestedTab, Info: { Side: number, Name: string? }) -> Tabbox,
+    AddLeftTabbox: (self: NestedTab, Name: string?) -> Tabbox,
+    AddRightTabbox: (self: NestedTab, Name: string?) -> Tabbox,
+    RefreshSides: (self: NestedTab) -> (),
+    Resize: (self: NestedTab) -> (),
+    Hover: (self: NestedTab, Hovering: boolean) -> (),
+    Show: (self: NestedTab) -> (),
+    Hide: (self: NestedTab) -> (),
+    SetVisible: (self: NestedTab, Visible: boolean) -> (),
+    Destroy: (self: NestedTab) -> (),
+}
+
 export type Tab = {
+    Type: "Tab",
+    Name: string,
     Window: Window,
     Groupboxes: { [string]: Groupbox },
     Tabboxes: { [string]: Tabbox },
     DependencyGroupboxes: { [number]: DependencyGroupbox },
+    SubTabs: { [string]: NestedTab },
+    ActiveSubTab: NestedTab?,
     Sides: { ScrollingFrame },
     WarningBox: { IsNormal: boolean, LockSize: boolean, Visible: boolean, Title: string, Text: string },
 
@@ -741,6 +797,9 @@ export type Tab = {
     AddTabbox: (self: Tab, Info: { Side: number, Name: string? }) -> Tabbox,
     AddLeftTabbox: (self: Tab, Name: string?) -> Tabbox,
     AddRightTabbox: (self: Tab, Name: string?) -> Tabbox,
+    AddSubTab: (self: Tab, Info: { Name: string, Icon: string? } | string, Icon: string?) -> NestedTab,
+    GetContentOffset: (self: Tab) -> number,
+    RefreshSides: (self: Tab) -> (),
     Hover: (self: Tab, Hovering: boolean) -> (),
     Show: (self: Tab) -> (),
     Hide: (self: Tab) -> (),
