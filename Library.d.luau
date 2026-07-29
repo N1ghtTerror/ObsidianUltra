@@ -902,6 +902,8 @@ export type Dialog = {
 
 export type Window = {
     IsSidebarCompacted: (self: Window) -> boolean,
+    SetSidebarStyle: (self: Window, Style: "Default" | "Rail") -> (),
+    GetSidebarStyle: (self: Window) -> "Default" | "Rail",
     GetSidebarWidth: (self: Window) -> number,
     SetSidebarWidth: (self: Window, Width: number) -> (),
     SetCompact: (self: Window, State: boolean) -> (),
@@ -1127,6 +1129,8 @@ export type Library = {
         WindowInfo: {
             Title: string?,
             Footer: string?,
+            CopyableFooter: boolean?,
+            SidebarStyle: ("Default" | "Rail")?,
             Position: UDim2?,
             Size: UDim2?,
             Icon: string?,

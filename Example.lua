@@ -28,6 +28,14 @@ local Window = Library:CreateWindow({
 	Icon = 95816097006870,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
+
+	-- Adds a copy button next to the footer, so the text can be copied (Default value = true)
+	-- It is hidden automatically if the executor has no clipboard function
+	CopyableFooter = true,
+
+	-- "Default" is the usual icon + label sidebar
+	-- "Rail" is a floating icon only strip; the tab name is shown as a tooltip
+	SidebarStyle = "Default",
 })
 
 -- CALLBACK NOTE:
@@ -757,6 +765,18 @@ MenuGroup:AddDropdown("DPIDropdown", {
 		local DPI = tonumber(Value)
 
 		Library:SetDPIScale(DPI)
+	end,
+})
+
+MenuGroup:AddDropdown("SidebarStyle", {
+	Values = { "Default", "Rail" },
+	Default = "Default",
+
+	Text = "Sidebar Style",
+	Tooltip = "Rail is a floating icon only sidebar",
+
+	Callback = function(Value)
+		Window:SetSidebarStyle(Value)
 	end,
 })
 

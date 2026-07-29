@@ -14,6 +14,7 @@ local getgenv = getgenv or function()
     return shared
 end
 local setclipboard = setclipboard or nil
+local SetClipboard = setclipboard or toclipboard or (syn and syn.write_clipboard) or nil
 local protectgui = protectgui or (syn and syn.protect_gui) or function() end
 local gethui = gethui or function()
     return CoreGui
@@ -356,6 +357,10 @@ local Templates = {
     Window = {
         Title = "No Title",
         Footer = "No Footer",
+        CopyableFooter = true,
+
+        --// "Default" | "Rail"
+        SidebarStyle = "Default",
 
         Position = UDim2.fromOffset(6, 6),
         Size = UDim2.fromOffset(720, 600),
@@ -1830,6 +1835,14 @@ end
 local TransparencyCache = {}
 local ActiveTabTweens = setmetatable({}, { __mode = "k" })
 local SUBTAB_BAR_HEIGHT = 32
+
+--// Icon only sidebar ("Rail" style)
+local RAIL_WIDTH = 56
+local RAIL_BUTTON_SIZE = 42
+local RAIL_BUTTON_PADDING = 9
+local RAIL_BUTTON_SPACING = 6
+local RAIL_CORNER_RADIUS = 10
+local RAIL_INSET = 5
 
 function Library:PlayTabAnimation(TabCanvas: CanvasGroup, Showing: boolean, OnComplete: (() -> ())?)
     if not TabCanvas then
@@ -8499,10 +8512,14 @@ function Library:CreateWindow(WindowInfo)
     local BackgroundImage
     local BottomBackground
     local FooterLabel
+    local FooterCopyButton
     local TopBar
+    local TabsLayout
+    local RailBackground
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
     local IsCompact = WindowInfo.SidebarCompacted
+    local SidebarStyle = WindowInfo.SidebarStyle == "Rail" and "Rail" or "Default"
     local LastExpandedWidth = InitialLeftWidth
 
     do
@@ -8789,14 +8806,108 @@ function Library:CreateWindow(WindowInfo)
         )
 
         --// Footer \\-
-        FooterLabel = New("TextLabel", {
+        local FooterHolder = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
+            Parent = BottomBar,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 6),
+            Parent = FooterHolder,
+        })
+
+        FooterLabel = New("TextLabel", {
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 0, 1, 0),
             Text = WindowInfo.Footer,
             TextSize = 14,
             TextTransparency = 0.5,
-            Parent = BottomBar,
+            Parent = FooterHolder,
         })
+
+        if WindowInfo.CopyableFooter and SetClipboard then
+            local CopyIcon = Library:GetIcon("copy")
+            local CopiedIcon = Library:GetIcon("check")
+
+            FooterCopyButton = New("TextButton", {
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 1,
+                Size = UDim2.fromOffset(18, 18),
+                Text = "",
+                Parent = FooterHolder,
+            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = FooterCopyButton,
+                })
+            )
+
+            local CopyImage = New("ImageLabel", {
+                Image = CopyIcon and CopyIcon.Url or "",
+                ImageColor3 = "FontColor",
+                ImageRectOffset = CopyIcon and CopyIcon.ImageRectOffset or Vector2.zero,
+                ImageRectSize = CopyIcon and CopyIcon.ImageRectSize or Vector2.zero,
+                ImageTransparency = 0.5,
+                ScaleType = Enum.ScaleType.Fit,
+                Size = UDim2.fromScale(1, 1),
+                Parent = FooterCopyButton,
+            })
+            --// Keeps the glyph off the button's edges no matter the icon set
+            New("UIPadding", {
+                PaddingBottom = UDim.new(0, 3),
+                PaddingLeft = UDim.new(0, 3),
+                PaddingRight = UDim.new(0, 3),
+                PaddingTop = UDim.new(0, 3),
+                Parent = FooterCopyButton,
+            })
+
+            Library:AddTooltip("Copy to clipboard", nil, FooterCopyButton)
+
+            local ResetThread
+            FooterCopyButton.MouseButton1Click:Connect(function()
+                local Success = pcall(SetClipboard, FooterLabel.Text)
+                if not Success then
+                    return
+                end
+
+                if CopiedIcon then
+                    CopyImage.Image = CopiedIcon.Url
+                    CopyImage.ImageRectOffset = CopiedIcon.ImageRectOffset
+                    CopyImage.ImageRectSize = CopiedIcon.ImageRectSize
+                end
+                CopyImage.ImageColor3 = Library.Scheme.AccentColor
+                CopyImage.ImageTransparency = 0
+
+                if ResetThread then
+                    task.cancel(ResetThread)
+                end
+
+                ResetThread = task.delay(1.5, function()
+                    ResetThread = nil
+
+                    if CopyIcon then
+                        CopyImage.Image = CopyIcon.Url
+                        CopyImage.ImageRectOffset = CopyIcon.ImageRectOffset
+                        CopyImage.ImageRectSize = CopyIcon.ImageRectSize
+                    end
+                    CopyImage.ImageColor3 = Library.Scheme.FontColor
+                    CopyImage.ImageTransparency = 0.5
+                end)
+            end)
+
+            FooterCopyButton.MouseEnter:Connect(function()
+                TweenService:Create(FooterCopyButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+            end)
+            FooterCopyButton.MouseLeave:Connect(function()
+                TweenService:Create(FooterCopyButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+            end)
+        end
 
         --// Resize Button \\--
         if WindowInfo.Resizable then
@@ -8838,7 +8949,7 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.new(0, InitialLeftWidth, 1, -70),
             Parent = MainFrame,
         })
-        New("UIListLayout", {
+        TabsLayout = New("UIListLayout", {
             Parent = Tabs,
         })
 
@@ -9025,6 +9136,10 @@ function Library:CreateWindow(WindowInfo)
     end
 
     local function ApplyCompact()
+        if SidebarStyle == "Rail" then
+            return
+        end
+
         IsCompact = Window:GetSidebarWidth() == WindowInfo.SidebarCompactWidth
         if WindowInfo.DisableCompactingSnap then
             IsCompact = Window:GetSidebarWidth() <= WindowInfo.CompactWidthActivation
@@ -9049,6 +9164,137 @@ function Library:CreateWindow(WindowInfo)
         end
     end
 
+    --// Icon only rail: a floating, rounded strip of square tab buttons
+    local RailPadding
+    local RailCorner
+
+    local function ApplySidebarStyle()
+        local Rail = SidebarStyle == "Rail"
+
+        TabsLayout.HorizontalAlignment = Rail and Enum.HorizontalAlignment.Center
+            or Enum.HorizontalAlignment.Left
+        TabsLayout.Padding = UDim.new(0, Rail and RAIL_BUTTON_SPACING or 0)
+
+        Tabs.BackgroundTransparency = Rail and 1 or 0
+        DividerLine.Visible = not Rail
+
+        if Rail then
+            if not RailPadding then
+                RailPadding = New("UIPadding", {
+                    PaddingBottom = UDim.new(0, 8),
+                    PaddingTop = UDim.new(0, 8),
+                    Parent = Tabs,
+                })
+            end
+
+            if not RailBackground then
+                RailBackground = New("Frame", {
+                    BackgroundColor3 = function()
+                        return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
+                    end,
+                    Position = UDim2.fromOffset(RAIL_INSET, 49 + RAIL_INSET),
+                    Size = UDim2.new(0, Window:GetSidebarWidth() - RAIL_INSET * 2, 1, -70 - RAIL_INSET * 2),
+                    ZIndex = 0,
+                    Parent = MainFrame,
+                })
+                RailCorner = New("UICorner", {
+                    CornerRadius = UDim.new(0, RAIL_CORNER_RADIUS),
+                    Parent = RailBackground,
+                })
+                Library:AddOutline(RailBackground)
+            end
+
+            RailBackground.Visible = true
+            RailBackground.Size =
+                UDim2.new(0, Window:GetSidebarWidth() - RAIL_INSET * 2, 1, -70 - RAIL_INSET * 2)
+        else
+            if RailPadding then
+                RailPadding.PaddingBottom = UDim.new(0, 0)
+                RailPadding.PaddingTop = UDim.new(0, 0)
+            end
+            if RailBackground then
+                RailBackground.Visible = false
+            end
+        end
+
+        for _, Entry in Library.TabButtons do
+            local Button = Entry.Button
+            if not Button then
+                continue
+            end
+
+            if Rail then
+                if not Entry.Corner then
+                    Entry.Corner = New("UICorner", {
+                        CornerRadius = UDim.new(0, RAIL_CORNER_RADIUS),
+                        Parent = Button,
+                    })
+                end
+
+                Button.Size = UDim2.fromOffset(RAIL_BUTTON_SIZE, RAIL_BUTTON_SIZE)
+                Entry.Corner.CornerRadius = UDim.new(0, RAIL_CORNER_RADIUS)
+
+                Entry.Padding.PaddingBottom = UDim.new(0, RAIL_BUTTON_PADDING)
+                Entry.Padding.PaddingLeft = UDim.new(0, RAIL_BUTTON_PADDING)
+                Entry.Padding.PaddingRight = UDim.new(0, RAIL_BUTTON_PADDING)
+                Entry.Padding.PaddingTop = UDim.new(0, RAIL_BUTTON_PADDING)
+
+                --// The name is hidden in this style, so surface it on hover
+                if not Entry.Tooltip and Entry.Name then
+                    Entry.Tooltip = Library:AddTooltip(Entry.Name, nil, Button)
+                end
+
+                if Entry.Label then
+                    Entry.Label.Visible = false
+                end
+                if Entry.Icon then
+                    Entry.Icon.Position = UDim2.fromScale(0, 0)
+                    Entry.Icon.Size = UDim2.fromScale(1, 1)
+                    Entry.Icon.SizeConstraint = Enum.SizeConstraint.RelativeXY
+                end
+            else
+                Button.Size = UDim2.new(1, 0, 0, 40)
+
+                if Entry.Corner then
+                    Entry.Corner:Destroy()
+                    Entry.Corner = nil
+                end
+                if Entry.Tooltip then
+                    Entry.Tooltip:Destroy()
+                    Entry.Tooltip = nil
+                end
+                if Entry.Icon then
+                    Entry.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY
+                        or Enum.SizeConstraint.RelativeYY
+                end
+            end
+        end
+
+        if not Rail and WindowInfo.EnableCompacting then
+            ApplyCompact()
+        end
+    end
+
+    --// "Default" | "Rail"
+    function Window:SetSidebarStyle(Style: string)
+        assert(Style == "Default" or Style == "Rail", "SidebarStyle must be Default or Rail.")
+
+        SidebarStyle = Style
+        WindowInfo.SidebarStyle = Style
+
+        if Style == "Rail" then
+            Window:SetSidebarWidth(RAIL_WIDTH)
+        else
+            Window:SetSidebarWidth(LastExpandedWidth)
+        end
+
+        ApplySidebarStyle()
+    end
+
+    function Window:GetSidebarStyle()
+        return SidebarStyle
+    end
+
     function Window:IsSidebarCompacted()
         return IsCompact
     end
@@ -9070,6 +9316,10 @@ function Library:CreateWindow(WindowInfo)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
         Tabs.Size = UDim2.new(0, Width, 1, -70)
         Container.Size = UDim2.new(1, -Width - 1, 1, -70)
+
+        if RailBackground then
+            RailBackground.Size = UDim2.new(0, Width - RAIL_INSET * 2, 1, -70 - RAIL_INSET * 2)
+        end
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
@@ -9165,6 +9415,8 @@ function Library:CreateWindow(WindowInfo)
             end
 
             table.insert(Library.TabButtons, {
+                Button = TabButton,
+                Name = Name,
                 Label = TabLabel,
                 Padding = ButtonPadding,
                 Icon = TabIcon,
@@ -10625,6 +10877,7 @@ function Library:CreateWindow(WindowInfo)
         TabButton.MouseButton1Click:Connect(Tab.Show)
 
         Library.Tabs[Name] = Tab
+        ApplySidebarStyle()
 
         return Tab
     end
@@ -10697,6 +10950,8 @@ function Library:CreateWindow(WindowInfo)
             end
 
             table.insert(Library.TabButtons, {
+                Button = TabButton,
+                Name = Name,
                 Label = TabLabel,
                 Padding = ButtonPadding,
                 Icon = TabIcon,
@@ -10939,6 +11194,7 @@ function Library:CreateWindow(WindowInfo)
         setmetatable(Tab, BaseGroupbox)
 
         Library.Tabs[Name] = Tab
+        ApplySidebarStyle()
 
         return Tab
     end
@@ -11643,6 +11899,9 @@ function Library:CreateWindow(WindowInfo)
     end
     if WindowInfo.EnableCompacting and WindowInfo.SidebarCompacted then
         Window:SetSidebarWidth(WindowInfo.SidebarCompactWidth)
+    end
+    if SidebarStyle == "Rail" then
+        Window:SetSidebarStyle("Rail")
     end
     if WindowInfo.AutoShow and not Library.ActiveLoading then
         task.spawn(Library.Toggle)
