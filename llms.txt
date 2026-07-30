@@ -64,8 +64,12 @@ Combat:SetSubTabAlignment("Left")   -- "Left" | "Center" | "Right"
 ```
 
 The active sub tab is drawn as a rounded chip: a fill lighter than `MainColor`, a thin
-outline, an accent label, and a bar underneath. Idle sub tabs are label only at 40%
-transparency; hover sits between the two.
+outline, a drop shadow, an accent label, and a bar underneath. Idle sub tabs are label only
+at 40% transparency; hover sits between the two.
+
+The sub tab button is only the hit target and the layout item — it is transparent, and
+holds the visible chip plus two offset shadow layers as siblings. Roblox renders children
+above their parent, so the shadow cannot be a child of the chip it falls behind.
 
 There is **one** underline shared by the whole bar, not one per button: it slides and
 resizes to the newly active chip on every switch, gradienting from the font colour at both

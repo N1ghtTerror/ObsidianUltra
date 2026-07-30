@@ -1844,6 +1844,8 @@ local SUBTAB_SLIDE_TWEEN = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.Easi
 --// Fraction of the chip the underline spans, and its gap above the chip's bottom edge
 local SUBTAB_UNDERLINE_WIDTH = 0.66
 local SUBTAB_UNDERLINE_GAP = 3
+--// Transparency per shadow layer, nearest the chip first
+local SUBTAB_SHADOW_TRANSPARENCY = { 0.55, 0.75 }
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -10469,35 +10471,68 @@ function Library:CreateWindow(WindowInfo)
             local IconWidth = SubIcon and SUBTAB_ICON_SIZE + 6 or 0
             local TextWidth = math.ceil(Library:GetTextBounds(SubName, Library.Scheme.Font, 15))
 
+            --// The button itself is just the hit target and the layout item. The
+            --// visible chip and its shadow are siblings inside it, because Roblox
+            --// renders children above their parent, so a shadow cannot be a child
+            --// of the thing it falls behind.
             local Button = New("TextButton", {
-                --// Lighter than MainColor so the active pill separates from the tab
-                BackgroundColor3 = function()
-                    return Library:GetBetterColor(Library.Scheme.MainColor, 10)
-                end,
                 BackgroundTransparency = 1,
                 Size = UDim2.fromOffset(TextWidth + IconWidth + 24, SUBTAB_BAR_HEIGHT - 8),
                 Text = "",
                 Parent = SubTabButtons,
             })
+
+            --// Two offset layers read as a soft shadow without needing an image
+            local ButtonShadows = {}
+            for Index = 1, 2 do
+                local Shadow = New("Frame", {
+                    BackgroundColor3 = "DarkColor",
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(0, Index),
+                    Size = UDim2.fromScale(1, 1),
+                    ZIndex = 1,
+                    Parent = Button,
+                })
+                table.insert(
+                    Library.Corners,
+                    New("UICorner", {
+                        CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                        Parent = Shadow,
+                    })
+                )
+
+                table.insert(ButtonShadows, Shadow)
+            end
+
+            local Chip = New("Frame", {
+                --// Lighter than MainColor so the active chip separates from the tab
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.MainColor, 10)
+                end,
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                ZIndex = 2,
+                Parent = Button,
+            })
             table.insert(
                 Library.Corners,
                 New("UICorner", {
                     CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                    Parent = Button,
+                    Parent = Chip,
                 })
             )
             local ButtonStroke = New("UIStroke", {
                 Color = "OutlineColor",
                 Transparency = 1,
-                Parent = Button,
+                Parent = Chip,
             })
 
-            --// Icon and label flow inside their own frame, so the underline below
-            --// is not swept into the row by the list layout
+            --// Icon and label flow inside their own frame, so nothing else in the
+            --// chip is swept into the row by the list layout
             local ButtonContent = New("Frame", {
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 1),
-                Parent = Button,
+                Parent = Chip,
             })
             New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
@@ -10632,12 +10667,17 @@ function Library:CreateWindow(WindowInfo)
                     return
                 end
 
-                TweenService:Create(Button, Library.TweenInfo, {
+                TweenService:Create(Chip, Library.TweenInfo, {
                     BackgroundTransparency = Hovering and 0.45 or 1,
                 }):Play()
                 TweenService:Create(ButtonStroke, Library.TweenInfo, {
                     Transparency = Hovering and 0.7 or 1,
                 }):Play()
+                for Index, Shadow in ButtonShadows do
+                    TweenService:Create(Shadow, Library.TweenInfo, {
+                        BackgroundTransparency = Hovering and SUBTAB_SHADOW_TRANSPARENCY[Index] + 0.2 or 1,
+                    }):Play()
+                end
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = Hovering and 0.1 or SUBTAB_IDLE_TRANSPARENCY,
                 }):Play()
@@ -10660,12 +10700,17 @@ function Library:CreateWindow(WindowInfo)
                 Library:AddToRegistry(ButtonLabel, { TextColor3 = "AccentColor" })
                 ButtonLabel.TextColor3 = Library.Scheme.AccentColor
 
-                TweenService:Create(Button, Library.TweenInfo, {
+                TweenService:Create(Chip, Library.TweenInfo, {
                     BackgroundTransparency = 0,
                 }):Play()
                 TweenService:Create(ButtonStroke, Library.TweenInfo, {
                     Transparency = 0.25,
                 }):Play()
+                for Index, Shadow in ButtonShadows do
+                    TweenService:Create(Shadow, Library.TweenInfo, {
+                        BackgroundTransparency = SUBTAB_SHADOW_TRANSPARENCY[Index],
+                    }):Play()
+                end
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = 0,
                 }):Play()
@@ -10690,12 +10735,17 @@ function Library:CreateWindow(WindowInfo)
                 Library:AddToRegistry(ButtonLabel, { TextColor3 = "FontColor" })
                 ButtonLabel.TextColor3 = Library.Scheme.FontColor
 
-                TweenService:Create(Button, Library.TweenInfo, {
+                TweenService:Create(Chip, Library.TweenInfo, {
                     BackgroundTransparency = 1,
                 }):Play()
                 TweenService:Create(ButtonStroke, Library.TweenInfo, {
                     Transparency = 1,
                 }):Play()
+                for _, Shadow in ButtonShadows do
+                    TweenService:Create(Shadow, Library.TweenInfo, {
+                        BackgroundTransparency = 1,
+                    }):Play()
+                end
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
                 }):Play()
