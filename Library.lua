@@ -1837,6 +1837,7 @@ local TransparencyCache = {}
 local ActiveTabTweens = setmetatable({}, { __mode = "k" })
 local SUBTAB_BAR_HEIGHT = 32
 local SUBTAB_IDLE_TRANSPARENCY = 0.4
+local SUBTAB_ICON_SIZE = 16
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -8914,14 +8915,14 @@ function Library:CreateWindow(WindowInfo)
                 TweenService:Create(CopyButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
             end)
 
-            --// The text itself is a copy target too
-            local LabelButton = New("TextButton", {
-                BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
-                Text = "",
-                Parent = Label,
-            })
-            LabelButton.MouseButton1Click:Connect(Copy)
+            --// The text itself is a copy target too. This listens on the label instead
+            --// of parenting a button to it, since a child sized relative to an
+            --// AutomaticSize parent makes that parent grow without bound.
+            Label.InputBegan:Connect(function(Input)
+                if IsClickInput(Input) then
+                    Copy()
+                end
+            end)
 
             table.insert(FooterSegments, CopyButton)
             return Label
@@ -10343,14 +10344,18 @@ function Library:CreateWindow(WindowInfo)
             SubIcon = Library:GetCustomIcon(SubIcon)
 
             --// Button \\--
+            --// Measured rather than AutomaticSize: the button holds children sized
+            --// relative to it (the underline), and auto sizing off those runs away.
+            local IconWidth = SubIcon and SUBTAB_ICON_SIZE + 6 or 0
+            local TextWidth = math.ceil(Library:GetTextBounds(SubName, Library.Scheme.Font, 15))
+
             local Button = New("TextButton", {
-                AutomaticSize = Enum.AutomaticSize.X,
                 --// Lighter than MainColor so the active pill separates from the tab
                 BackgroundColor3 = function()
                     return Library:GetBetterColor(Library.Scheme.MainColor, 10)
                 end,
                 BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(0, SUBTAB_BAR_HEIGHT - 8),
+                Size = UDim2.fromOffset(TextWidth + IconWidth + 24, SUBTAB_BAR_HEIGHT - 8),
                 Text = "",
                 Parent = SubTabBar,
             })
@@ -10361,17 +10366,19 @@ function Library:CreateWindow(WindowInfo)
                     Parent = Button,
                 })
             )
+            --// Icon and label flow inside their own frame, so the underline below
+            --// is not swept into the row by the list layout
+            local ButtonContent = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Parent = Button,
+            })
             New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
                 HorizontalAlignment = Enum.HorizontalAlignment.Center,
                 VerticalAlignment = Enum.VerticalAlignment.Center,
                 Padding = UDim.new(0, 6),
-                Parent = Button,
-            })
-            New("UIPadding", {
-                PaddingLeft = UDim.new(0, 12),
-                PaddingRight = UDim.new(0, 12),
-                Parent = Button,
+                Parent = ButtonContent,
             })
 
             local ButtonIcon
@@ -10381,22 +10388,21 @@ function Library:CreateWindow(WindowInfo)
                     ImageColor3 = SubIcon.Custom and "WhiteColor" or "AccentColor",
                     ImageRectOffset = SubIcon.ImageRectOffset,
                     ImageRectSize = SubIcon.ImageRectSize,
-                    ImageTransparency = 0.5,
+                    ImageTransparency = SUBTAB_IDLE_TRANSPARENCY,
                     ScaleType = Enum.ScaleType.Fit,
-                    Size = UDim2.fromOffset(16, 16),
-                    Parent = Button,
+                    Size = UDim2.fromOffset(SUBTAB_ICON_SIZE, SUBTAB_ICON_SIZE),
+                    Parent = ButtonContent,
                 })
             end
 
             local ButtonLabel = New("TextLabel", {
-                AutomaticSize = Enum.AutomaticSize.X,
                 BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(0, 16),
+                Size = UDim2.fromOffset(TextWidth, 16),
                 Text = SubName,
                 TextSize = 15,
                 TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
                 TextXAlignment = Enum.TextXAlignment.Center,
-                Parent = Button,
+                Parent = ButtonContent,
             })
 
             --// Accent bar under the active button, so the state reads at a glance
