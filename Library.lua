@@ -10279,6 +10279,7 @@ function Library:CreateWindow(WindowInfo)
 
         --// Sub Tabs \\--
         local SubTabBar
+        local SubTabButtons
         local SubTabBarLayout
         local SubTabUnderline
         local SubTabUnderlineTween
@@ -10298,12 +10299,19 @@ function Library:CreateWindow(WindowInfo)
                 ZIndex = 2,
                 Parent = TabContainer,
             })
+            --// The buttons get their own frame: a UIListLayout lays out every child,
+            --// so the underline cannot live alongside them without being laid out too
+            SubTabButtons = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Parent = SubTabBar,
+            })
             SubTabBarLayout = New("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal,
                 HorizontalAlignment = Enum.HorizontalAlignment[SubTabAlignment],
                 VerticalAlignment = Enum.VerticalAlignment.Center,
                 Padding = UDim.new(0, 6),
-                Parent = SubTabBar,
+                Parent = SubTabButtons,
             })
 
             --// A single bar shared by every sub tab, so it can slide between them.
@@ -10453,7 +10461,7 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 Size = UDim2.fromOffset(TextWidth + IconWidth + 24, SUBTAB_BAR_HEIGHT - 8),
                 Text = "",
-                Parent = SubTabBar,
+                Parent = SubTabButtons,
             })
             table.insert(
                 Library.Corners,
