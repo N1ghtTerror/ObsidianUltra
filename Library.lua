@@ -10418,8 +10418,8 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundColor3 = "AccentColor",
                 BackgroundTransparency = 1,
                 BorderSizePixel = 0,
-                Position = UDim2.new(0.5, 0, 1, 3),
-                Size = UDim2.new(1, -6, 0, 2),
+                Position = UDim2.new(0.5, 0, 1, 0),
+                Size = UDim2.new(1, -6, 0, 1),
                 Parent = Button,
             })
             New("UIGradient", {
