@@ -1841,6 +1841,9 @@ local SUBTAB_BAR_HEIGHT = 32
 local SUBTAB_IDLE_TRANSPARENCY = 0.4
 local SUBTAB_ICON_SIZE = 16
 local SUBTAB_SLIDE_TWEEN = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+--// Fraction of the chip the underline spans, and its gap above the chip's bottom edge
+local SUBTAB_UNDERLINE_WIDTH = 0.66
+local SUBTAB_UNDERLINE_GAP = 3
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -10326,6 +10329,7 @@ function Library:CreateWindow(WindowInfo)
                 Parent = SubTabBar,
             })
             New("UIGradient", {
+                --// Font colour at the ends, accent in the middle
                 Color = function()
                     return ColorSequence.new({
                         ColorSequenceKeypoint.new(0, Library.Scheme.FontColor),
@@ -10333,9 +10337,13 @@ function Library:CreateWindow(WindowInfo)
                         ColorSequenceKeypoint.new(1, Library.Scheme.FontColor),
                     })
                 end,
+                --// Extra keypoints either side of the middle round the falloff off,
+                --// so the ends taper away instead of ramping linearly
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(0.5, 0),
+                    NumberSequenceKeypoint.new(0.2, 0.85),
+                    NumberSequenceKeypoint.new(0.5, 0.1),
+                    NumberSequenceKeypoint.new(0.8, 0.85),
                     NumberSequenceKeypoint.new(1, 1),
                 }),
                 Parent = SubTabUnderline,
@@ -10379,10 +10387,18 @@ function Library:CreateWindow(WindowInfo)
             local Scale = Library.DPIScale
             local OffsetX = (Button.AbsolutePosition.X - SubTabBar.AbsolutePosition.X) / Scale
             local Width = Button.AbsoluteSize.X / Scale
+            --// Sits inside the chip, a little above its bottom edge
+            local Bottom = (Button.AbsolutePosition.Y + Button.AbsoluteSize.Y - SubTabBar.AbsolutePosition.Y) / Scale
+
+            --// Inset to a fraction of the chip, centered under the text
+            local LineWidth = math.floor(Width * SUBTAB_UNDERLINE_WIDTH)
 
             local Target = {
-                Position = UDim2.new(0, OffsetX + 3, 1, 0),
-                Size = UDim2.fromOffset(Width - 6, 1),
+                Position = UDim2.fromOffset(
+                    math.floor(OffsetX + (Width - LineWidth) / 2),
+                    Bottom - SUBTAB_UNDERLINE_GAP
+                ),
+                Size = UDim2.fromOffset(LineWidth, 1),
             }
 
             if SubTabUnderlineTween then
