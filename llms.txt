@@ -64,9 +64,15 @@ Combat:SetSubTabAlignment("Left")   -- "Left" | "Center" | "Right"
 ```
 
 The active sub tab is drawn as a rounded chip: a fill lighter than `MainColor`, a thin
-outline, an accent label, and a bar under it that gradients from the font colour at both
-ends to the accent colour in the middle (fading out at the edges). Idle sub tabs are label
-only at 40% transparency; hover sits between the two.
+outline, an accent label, and a bar underneath. Idle sub tabs are label only at 40%
+transparency; hover sits between the two.
+
+There is **one** underline shared by the whole bar, not one per button: it slides and
+resizes to the newly active chip on every switch, gradienting from the font colour at both
+ends to the accent colour in the middle. It snaps rather than slides on the first show and
+when the bar is resized. Disable the slide with
+`Animations = { SubTabUnderline = false }` — unlike the other animation flags it defaults
+to `true`.
 
 ### Behaviour worth knowing
 

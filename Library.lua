@@ -408,7 +408,9 @@ local Templates = {
             TabSwitch = false,
             Groupbox = false,
             Dropdown = false,
-            KeyPicker = false
+            KeyPicker = false,
+            --// The sub tab bar slide; on by default, it is a small ornament
+            SubTabUnderline = true
         },
 
         TabTransitionTime = 0.22,
@@ -1838,6 +1840,7 @@ local ActiveTabTweens = setmetatable({}, { __mode = "k" })
 local SUBTAB_BAR_HEIGHT = 32
 local SUBTAB_IDLE_TRANSPARENCY = 0.4
 local SUBTAB_ICON_SIZE = 16
+local SUBTAB_SLIDE_TWEEN = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -10277,7 +10280,11 @@ function Library:CreateWindow(WindowInfo)
         --// Sub Tabs \\--
         local SubTabBar
         local SubTabBarLayout
+        local SubTabUnderline
+        local SubTabUnderlineTween
         local SubTabAlignment = "Center"
+        --// Declared up here so CreateSubTabBar below can reach it
+        local MoveSubTabUnderline
 
         local function CreateSubTabBar()
             if SubTabBar then
@@ -10299,11 +10306,100 @@ function Library:CreateWindow(WindowInfo)
                 Parent = SubTabBar,
             })
 
+            --// A single bar shared by every sub tab, so it can slide between them.
+            --// Accent in the middle fading out at both ends, rather than a hard rule.
+            SubTabUnderline = New("Frame", {
+                AnchorPoint = Vector2.new(0, 1),
+                BackgroundColor3 = "AccentColor",
+                BorderSizePixel = 0,
+                Position = UDim2.new(0, 0, 1, 0),
+                Size = UDim2.fromOffset(0, 1),
+                Visible = false,
+                Parent = SubTabBar,
+            })
+            New("UIGradient", {
+                Color = function()
+                    return ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, Library.Scheme.FontColor),
+                        ColorSequenceKeypoint.new(0.5, Library.Scheme.AccentColor),
+                        ColorSequenceKeypoint.new(1, Library.Scheme.FontColor),
+                    })
+                end,
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(0.5, 0),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = SubTabUnderline,
+            })
+
+            --// The buttons move when the window is resized, so follow them
+            table.insert(
+                Tab.Connections,
+                SubTabBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                    if Tab.ActiveSubTab then
+                        SubTabUnderline.Visible = false
+                        MoveSubTabUnderline(Tab.ActiveSubTab.Button)
+                    end
+                end)
+            )
+
             --// The parent tab acts purely as a host once sub tabs exist
             TabLeft.Visible = false
             TabRight.Visible = false
 
             Tab:RefreshSides()
+        end
+
+        --// Slides the shared bar under Button; snaps when nothing was active yet
+        function MoveSubTabUnderline(Button: GuiObject)
+            if not SubTabUnderline then
+                return
+            end
+
+            --// A button added this frame has not been laid out yet
+            if Button.AbsoluteSize.X == 0 then
+                task.defer(function()
+                    if Tab.ActiveSubTab and Tab.ActiveSubTab.Button == Button then
+                        MoveSubTabUnderline(Button)
+                    end
+                end)
+
+                return
+            end
+
+            local Scale = Library.DPIScale
+            local OffsetX = (Button.AbsolutePosition.X - SubTabBar.AbsolutePosition.X) / Scale
+            local Width = Button.AbsoluteSize.X / Scale
+
+            local Target = {
+                Position = UDim2.new(0, OffsetX + 3, 1, 0),
+                Size = UDim2.fromOffset(Width - 6, 1),
+            }
+
+            if SubTabUnderlineTween then
+                StopTween(SubTabUnderlineTween, true)
+                SubTabUnderlineTween = nil
+            end
+
+            --// Nothing to slide from on the first show
+            if not SubTabUnderline.Visible then
+                SubTabUnderline.Position = Target.Position
+                SubTabUnderline.Size = Target.Size
+                SubTabUnderline.Visible = true
+
+                return
+            end
+
+            if Library.Animations and Library.Animations.SubTabUnderline == false then
+                SubTabUnderline.Position = Target.Position
+                SubTabUnderline.Size = Target.Size
+
+                return
+            end
+
+            SubTabUnderlineTween = TweenService:Create(SubTabUnderline, SUBTAB_SLIDE_TWEEN, Target)
+            SubTabUnderlineTween:Play()
         end
 
         --// "Left" | "Center" | "Right"
@@ -10409,33 +10505,6 @@ function Library:CreateWindow(WindowInfo)
                 TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
                 TextXAlignment = Enum.TextXAlignment.Center,
                 Parent = ButtonContent,
-            })
-
-            --// Bar under the active button: accent in the middle, fading out at both
-            --// ends, so it reads as a soft gradient rather than a hard rule
-            local Underline = New("Frame", {
-                AnchorPoint = Vector2.new(0.5, 1),
-                BackgroundColor3 = "AccentColor",
-                BackgroundTransparency = 1,
-                BorderSizePixel = 0,
-                Position = UDim2.new(0.5, 0, 1, 0),
-                Size = UDim2.new(1, -6, 0, 1),
-                Parent = Button,
-            })
-            New("UIGradient", {
-                Color = function()
-                    return ColorSequence.new({
-                        ColorSequenceKeypoint.new(0, Library.Scheme.FontColor),
-                        ColorSequenceKeypoint.new(0.5, Library.Scheme.AccentColor),
-                        ColorSequenceKeypoint.new(1, Library.Scheme.FontColor),
-                    })
-                end,
-                Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(0.5, 0),
-                    NumberSequenceKeypoint.new(1, 1),
-                }),
-                Parent = Underline,
             })
 
             --// Content \\--
@@ -10581,11 +10650,10 @@ function Library:CreateWindow(WindowInfo)
                         ImageTransparency = 0,
                     }):Play()
                 end
-                TweenService:Create(Underline, Library.TweenInfo, {
-                    BackgroundTransparency = 0,
-                }):Play()
-
+                --// Set before moving the bar: a deferred move re-checks it
                 Tab.ActiveSubTab = SubTab
+                MoveSubTabUnderline(Button)
+
                 SubTab:RefreshSides()
                 Library:PlayTabAnimation(SubCanvas, true)
 
@@ -10612,9 +10680,6 @@ function Library:CreateWindow(WindowInfo)
                         ImageTransparency = SUBTAB_IDLE_TRANSPARENCY,
                     }):Play()
                 end
-                TweenService:Create(Underline, Library.TweenInfo, {
-                    BackgroundTransparency = 1,
-                }):Play()
 
                 Library:PlayTabAnimation(SubCanvas, false)
 
@@ -10634,6 +10699,12 @@ function Library:CreateWindow(WindowInfo)
                             Other:Show()
                             break
                         end
+                    end
+
+                    --// Hiding is only left unresolved when none are visible. The bar
+                    --// has nothing to sit under, and the next Show snaps it back.
+                    if not Tab.ActiveSubTab and SubTabUnderline then
+                        SubTabUnderline.Visible = false
                     end
                 end
             end
@@ -10671,6 +10742,11 @@ function Library:CreateWindow(WindowInfo)
 
                 if Tab.ActiveSubTab == SubTab then
                     Tab.ActiveSubTab = nil
+
+                    --// The button it was sitting under is gone
+                    if SubTabUnderline then
+                        SubTabUnderline.Visible = false
+                    end
                 end
                 Tab.SubTabs[SubName] = nil
             end
