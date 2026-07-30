@@ -10366,6 +10366,12 @@ function Library:CreateWindow(WindowInfo)
                     Parent = Button,
                 })
             )
+            local ButtonStroke = New("UIStroke", {
+                Color = "OutlineColor",
+                Transparency = 1,
+                Parent = Button,
+            })
+
             --// Icon and label flow inside their own frame, so the underline below
             --// is not swept into the row by the list layout
             local ButtonContent = New("Frame", {
@@ -10405,23 +10411,32 @@ function Library:CreateWindow(WindowInfo)
                 Parent = ButtonContent,
             })
 
-            --// Accent bar under the active button, so the state reads at a glance
+            --// Bar under the active button: accent in the middle, fading out at both
+            --// ends, so it reads as a soft gradient rather than a hard rule
             local Underline = New("Frame", {
                 AnchorPoint = Vector2.new(0.5, 1),
                 BackgroundColor3 = "AccentColor",
                 BackgroundTransparency = 1,
                 BorderSizePixel = 0,
                 Position = UDim2.new(0.5, 0, 1, 3),
-                Size = UDim2.new(1, -10, 0, 2),
+                Size = UDim2.new(1, -6, 0, 2),
                 Parent = Button,
             })
-            table.insert(
-                Library.PillCorners,
-                New("UICorner", {
-                    CornerRadius = WindowInfo.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
-                    Parent = Underline,
-                })
-            )
+            New("UIGradient", {
+                Color = function()
+                    return ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, Library.Scheme.FontColor),
+                        ColorSequenceKeypoint.new(0.5, Library.Scheme.AccentColor),
+                        ColorSequenceKeypoint.new(1, Library.Scheme.FontColor),
+                    })
+                end,
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(0.5, 0),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = Underline,
+            })
 
             --// Content \\--
             local SubCanvas = New("CanvasGroup", {
@@ -10527,6 +10542,9 @@ function Library:CreateWindow(WindowInfo)
                 TweenService:Create(Button, Library.TweenInfo, {
                     BackgroundTransparency = Hovering and 0.45 or 1,
                 }):Play()
+                TweenService:Create(ButtonStroke, Library.TweenInfo, {
+                    Transparency = Hovering and 0.7 or 1,
+                }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = Hovering and 0.1 or SUBTAB_IDLE_TRANSPARENCY,
                 }):Play()
@@ -10551,6 +10569,9 @@ function Library:CreateWindow(WindowInfo)
 
                 TweenService:Create(Button, Library.TweenInfo, {
                     BackgroundTransparency = 0,
+                }):Play()
+                TweenService:Create(ButtonStroke, Library.TweenInfo, {
+                    Transparency = 0.25,
                 }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = 0,
@@ -10579,6 +10600,9 @@ function Library:CreateWindow(WindowInfo)
 
                 TweenService:Create(Button, Library.TweenInfo, {
                     BackgroundTransparency = 1,
+                }):Play()
+                TweenService:Create(ButtonStroke, Library.TweenInfo, {
+                    Transparency = 1,
                 }):Play()
                 TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = SUBTAB_IDLE_TRANSPARENCY,

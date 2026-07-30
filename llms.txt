@@ -63,8 +63,10 @@ The button row is centered by default:
 Combat:SetSubTabAlignment("Left")   -- "Left" | "Center" | "Right"
 ```
 
-The active sub tab is drawn as a filled pill (lighter than `MainColor`) with an accent
-label and an accent bar under it; idle ones are label only at 40% transparency.
+The active sub tab is drawn as a rounded chip: a fill lighter than `MainColor`, a thin
+outline, an accent label, and a bar under it that gradients from the font colour at both
+ends to the accent colour in the middle (fading out at the edges). Idle sub tabs are label
+only at 40% transparency; hover sits between the two.
 
 ### Behaviour worth knowing
 
