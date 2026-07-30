@@ -119,6 +119,18 @@ local ThemeManager = {
         ["Material"] = {
             18,
             { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242", BackgroundImage = "" },
+        },
+        ["Spotify"] = {
+            19,
+            { FontColor = "ffffff", MainColor = "282828", AccentColor = "1db954", BackgroundColor = "121212", OutlineColor = "3e3e3e", BackgroundImage = "" },
+        },
+        ["ChatGPT"] = {
+            20,
+            { FontColor = "ececec", MainColor = "2f2f2f", AccentColor = "10a37f", BackgroundColor = "212121", OutlineColor = "424242", BackgroundImage = "" },
+        },
+        ["Claude"] = {
+            21,
+            { FontColor = "f5f4ef", MainColor = "30302e", AccentColor = "d97757", BackgroundColor = "1f1e1d", OutlineColor = "46453f", BackgroundImage = "" },
         }
     }
 }
