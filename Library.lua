@@ -1846,6 +1846,10 @@ local SUBTAB_UNDERLINE_WIDTH = 0.66
 local SUBTAB_UNDERLINE_GAP = 3
 --// Transparency per shadow layer, nearest the chip first
 local SUBTAB_SHADOW_TRANSPARENCY = { 0.55, 0.75 }
+--// Hover squashes the chip slightly; the button itself keeps its size so the row
+--// never reflows, and the underline stays put
+local SUBTAB_HOVER_SCALE = 0.94
+local SUBTAB_HOVER_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -10482,6 +10486,22 @@ function Library:CreateWindow(WindowInfo)
                 Parent = SubTabButtons,
             })
 
+            --// Everything visible lives in here so hover can scale it as one piece,
+            --// while the button keeps its size and the row never reflows
+            local ButtonVisual = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundTransparency = 1,
+                Position = UDim2.fromScale(0.5, 0.5),
+                Size = UDim2.fromScale(1, 1),
+                Parent = Button,
+            })
+            --// Deliberately not in Library.Scales: that is the DPI scale, which would
+            --// overwrite this every time SetDPIScale runs
+            local ButtonScale = New("UIScale", {
+                Scale = 1,
+                Parent = ButtonVisual,
+            })
+
             --// Two offset layers read as a soft shadow without needing an image
             local ButtonShadows = {}
             for Index = 1, 2 do
@@ -10491,7 +10511,7 @@ function Library:CreateWindow(WindowInfo)
                     Position = UDim2.fromOffset(0, Index),
                     Size = UDim2.fromScale(1, 1),
                     ZIndex = 1,
-                    Parent = Button,
+                    Parent = ButtonVisual,
                 })
                 table.insert(
                     Library.Corners,
@@ -10512,7 +10532,7 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 Size = UDim2.fromScale(1, 1),
                 ZIndex = 2,
-                Parent = Button,
+                Parent = ButtonVisual,
             })
             table.insert(
                 Library.Corners,
@@ -10663,6 +10683,12 @@ function Library:CreateWindow(WindowInfo)
             end
 
             function SubTab:Hover(Hovering)
+                --// The squash applies to the active sub tab too: hovering the chip you
+                --// are already on should still respond
+                TweenService:Create(ButtonScale, SUBTAB_HOVER_TWEEN, {
+                    Scale = Hovering and SUBTAB_HOVER_SCALE or 1,
+                }):Play()
+
                 if Tab.ActiveSubTab == SubTab then
                     return
                 end
@@ -10764,6 +10790,11 @@ function Library:CreateWindow(WindowInfo)
 
             function SubTab:SetVisible(Visible: boolean)
                 Button.Visible = Visible
+
+                --// Hiding a hovered button never fires MouseLeave
+                if not Visible then
+                    ButtonScale.Scale = 1
+                end
 
                 if not Visible and Tab.ActiveSubTab == SubTab then
                     SubTab:Hide()
