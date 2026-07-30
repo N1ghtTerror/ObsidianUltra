@@ -128,6 +128,43 @@ The header was reworked and differs from upstream in ways that affect script aut
   the tab info grows to fill whatever the search box does not use. Pass your own
   `SearchbarSize` to override.
 
+## Expandable dropdowns
+
+Every dropdown gets a small expand button beside its arrow. Clicking it opens all of the
+dropdown's values in a panel over the window — a dimmed overlay with a titled panel, an
+optional searchbar, and the values laid out in columns. It is the same dropdown underneath:
+selecting in the panel and selecting in the inline list run identical code, and both views
+stay in sync.
+
+```lua
+Groupbox:AddDropdown("Materials", {
+    Values = Materials,      -- long lists are what this is for
+    Multi = true,
+    Searchable = true,       -- gives the panel its own searchbar
+
+    Expandable = true,       -- default; false removes the expand button
+    ExpandColumns = 3,       -- default 2
+})
+```
+
+Closing: the panel's **X** button, clicking anywhere off the panel, or — when the dropdown
+is single select — picking a value. Multi select panels stay open so several values can be
+ticked in one visit.
+
+Methods: `Dropdown:Expand()`, `Dropdown:Collapse()`, `Dropdown:ToggleExpanded()`,
+`Dropdown:IsExpanded()`.
+
+Notes:
+- The panel's searchbar only exists when `Searchable = true`, and it is separate from the
+  inline searchbar — opening the panel clears it.
+- Only one dropdown can be expanded at a time; expanding one collapses another, and the
+  open inline menu is closed.
+- `Library.ActiveExpandedDropdown` holds the expanded dropdown, or `nil`.
+- The panel is parented to `Library.MainFrame` (this fork stores the window frame there so
+  elements defined outside `CreateWindow` can overlay it). If there is no window yet,
+  `Expand` does nothing.
+- `DisabledValues` render dimmed and unclickable in the panel, as in the inline list.
+
 ## Copyable footer
 
 The footer is a row of segments, and each segment is either plain text or a copy target.

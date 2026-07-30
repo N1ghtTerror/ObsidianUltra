@@ -178,6 +178,9 @@ export type DropdownInfo = {
     DisabledValues: { any }?,
     Multi: boolean?,
     MaxVisibleDropdownItems: number?,
+    --// Expandable adds a button that opens the values in a panel over the window
+    Expandable: boolean?,
+    ExpandColumns: number?,
     SpecialType: "Player" | "Team"?,
     ExcludeLocalPlayer: boolean?,
     AllowNull: boolean?,
@@ -509,6 +512,11 @@ export type Dropdown = {
     SetDisabled: (self: Dropdown, Disabled: boolean) -> (),
     SetVisible: (self: Dropdown, Visible: boolean) -> (),
     SetText: (self: Dropdown, Text: string) -> (),
+    --// The expanded panel over the window
+    Expand: (self: Dropdown) -> (),
+    Collapse: (self: Dropdown) -> (),
+    ToggleExpanded: (self: Dropdown) -> (),
+    IsExpanded: (self: Dropdown) -> boolean,
     Destroy: (self: Dropdown) -> (),
 }
 

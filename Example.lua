@@ -411,6 +411,14 @@ DropdownGroupBox:AddDropdown("MyDropdown", {
 
 	Searchable = false, -- true / false, makes the dropdown searchable (great for a long list of values)
 
+	-- Every dropdown gets an expand button next to its arrow, which opens all of the
+	-- values in a panel over the window. Set Expandable = false to remove it, and
+	-- ExpandColumns to change how many columns the panel lays the values out in.
+	-- The panel closes with its X button, by clicking off it, or on picking a value
+	-- when the dropdown is single select. It has its own searchbar if Searchable.
+	Expandable = true,
+	ExpandColumns = 2,
+
 	Callback = function(Value)
 		print("[cb] Dropdown got changed. New value:", Value)
 	end,
@@ -418,6 +426,9 @@ DropdownGroupBox:AddDropdown("MyDropdown", {
 	Disabled = false, -- Will disable the dropdown (true / false)
 	Visible = true, -- Will make the dropdown invisible (true / false)
 })
+
+-- You can also drive the panel from code:
+-- Options.MyDropdown:Expand() / :Collapse() / :ToggleExpanded() / :IsExpanded()
 
 Options.MyDropdown:OnChanged(function()
 	print("Dropdown got changed. New value:", Options.MyDropdown.Value)
@@ -443,6 +454,31 @@ DropdownGroupBox:AddDropdown("MySearchableDropdown", {
 	Disabled = false, -- Will disable the dropdown (true / false)
 	Visible = true, -- Will make the dropdown invisible (true / false)
 })
+
+-- The expanded panel earns its keep on long lists: 3 columns, multi select, and its
+-- own searchbar. Multi select panels stay open so you can tick several values.
+do
+	local Materials = {}
+	for _, Material in Enum.Material:GetEnumItems() do
+		table.insert(Materials, Material.Name)
+	end
+
+	DropdownGroupBox:AddDropdown("MyExpandableDropdown", {
+		Values = Materials,
+		Default = 1,
+		Multi = true,
+
+		Text = "An expandable dropdown",
+		Tooltip = "Click the expand icon to see every value at once",
+
+		Searchable = true,
+		ExpandColumns = 3,
+
+		Callback = function(Value)
+			print("[cb] Expandable dropdown changed.", Value)
+		end,
+	})
+end
 
 DropdownGroupBox:AddDropdown("MyDisplayFormattedDropdown", {
 	Values = { "This", "is", "a", "formatted", "dropdown" },
