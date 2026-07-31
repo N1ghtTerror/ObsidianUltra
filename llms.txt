@@ -139,8 +139,9 @@ accent colour with a gentler ramp. The ball is `FontColor` with a shadow beneath
 slides between the two ends.
 
 **Slider** puts its label top left and its value top right, above a pill shaped bar, with a
-ball riding the fill edge. The empty track is the same grey ramp as the switch; the filled
-part is the accent colour. The ball is **wider than the bar** — 18px against a 16px bar,
+ball riding the fill edge. The track is a grey ramp running light at the left to dark at
+the right — the opposite direction to the switch — so the filled part always reads brighter
+than the track that follows it. The filled part is the accent colour. The ball is **wider than the bar** — 18px against a 16px bar,
 growing to 24px while hovered or dragged on a Sine in-out curve — so it sits proud of the
 track, and the holder reserves margin for it to overflow into. It carries a shadow and a
 faint outline, and the bar has an inner outline: a ring inset by a pixel, since Roblox

@@ -1880,6 +1880,10 @@ local SLIDER_BALL_SIZE_ACTIVE = 24
 local SLIDER_BALL_TWEEN = TweenInfo.new(0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 --// Room above and below the bar for the ball to overflow into
 local SLIDER_BALL_MARGIN = math.ceil((SLIDER_BALL_SIZE_ACTIVE - SLIDER_BAR_HEIGHT) / 2)
+--// The track ramps the opposite way to the switch: lighter at the left, darker
+--// to the right, so the filled part always reads brighter than what follows it
+local SLIDER_TRACK_GRADIENT_FROM = Color3.fromRGB(138, 138, 138)
+local SLIDER_TRACK_GRADIENT_TO = Color3.fromRGB(64, 64, 64)
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -6038,7 +6042,7 @@ do
 
         if not Info.Compact then
             New("UIGradient", {
-                Color = ColorSequence.new(SWITCH_OFF_GRADIENT_FROM, SWITCH_OFF_GRADIENT_TO),
+                Color = ColorSequence.new(SLIDER_TRACK_GRADIENT_FROM, SLIDER_TRACK_GRADIENT_TO),
                 Parent = Bar,
             })
         end
