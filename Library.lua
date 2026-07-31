@@ -1872,11 +1872,14 @@ local SWITCH_ON_GRADIENT_FROM = Color3.fromRGB(205, 205, 205)
 local SWITCH_ON_GRADIENT_TO = Color3.new(1, 1, 1)
 local SWITCH_BALL_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
---// Slider ball: grows when hovered or dragged, on a smooth in-out curve
-local SLIDER_BAR_HEIGHT = 18
-local SLIDER_BALL_SIZE = 12
-local SLIDER_BALL_SIZE_ACTIVE = 17
+--// Slider ball: grows when hovered or dragged, on a smooth in-out curve. It is
+--// wider than the bar in both states, so it sits proud of the track.
+local SLIDER_BAR_HEIGHT = 16
+local SLIDER_BALL_SIZE = 18
+local SLIDER_BALL_SIZE_ACTIVE = 24
 local SLIDER_BALL_TWEEN = TweenInfo.new(0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+--// Room above and below the bar for the ball to overflow into
+local SLIDER_BALL_MARGIN = math.ceil((SLIDER_BALL_SIZE_ACTIVE - SLIDER_BAR_HEIGHT) / 2)
 
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
@@ -5985,7 +5988,12 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, Info.Compact and 15 or (18 + SLIDER_BAR_HEIGHT)),
+            Size = UDim2.new(
+                1,
+                0,
+                0,
+                Info.Compact and 15 or (22 + SLIDER_BAR_HEIGHT + SLIDER_BALL_MARGIN)
+            ),
             Visible = Slider.Visible,
             Parent = Container,
         })
@@ -6014,8 +6022,10 @@ do
         local Bar = New("TextButton", {
             Active = not Slider.Disabled,
             AnchorPoint = Vector2.new(0, 1),
-            BackgroundColor3 = "MainColor",
-            Position = UDim2.fromScale(0, 1),
+            --// Same grey material as the switch track, rather than near black
+            BackgroundColor3 = Info.Compact and "MainColor" or "FontColor",
+            Position = Info.Compact and UDim2.fromScale(0, 1)
+                or UDim2.new(0, 0, 1, -SLIDER_BALL_MARGIN),
             Size = UDim2.new(1, 0, 0, Info.Compact and 15 or SLIDER_BAR_HEIGHT),
             Text = "",
             Parent = Holder,
@@ -6025,6 +6035,13 @@ do
             Color = "OutlineColor",
             Parent = Bar,
         })
+
+        if not Info.Compact then
+            New("UIGradient", {
+                Color = ColorSequence.new(SWITCH_OFF_GRADIENT_FROM, SWITCH_OFF_GRADIENT_TO),
+                Parent = Bar,
+            })
+        end
 
         --// Compact keeps the value inside the bar; otherwise it sits top right
         local DisplayLabel = New("TextLabel", {
@@ -6083,13 +6100,33 @@ do
         local BallShadow
         local BallActive = false
         if not Info.Compact then
+            --// Roblox strokes sit outside the border, so the inner outline is a
+            --// ring inset by a pixel rather than a stroke on the bar itself
+            local InnerOutline = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundTransparency = 1,
+                Position = UDim2.fromScale(0.5, 0.5),
+                Size = UDim2.new(1, -2, 1, -2),
+                ZIndex = Bar.ZIndex + 2,
+                Parent = Bar,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(1, 0),
+                Parent = InnerOutline,
+            })
+            New("UIStroke", {
+                Color = "DarkColor",
+                Transparency = 0.7,
+                Parent = InnerOutline,
+            })
+
             BallShadow = New("Frame", {
                 AnchorPoint = Vector2.new(0.5, 0.5),
                 BackgroundColor3 = "DarkColor",
                 BackgroundTransparency = 0.55,
                 Position = UDim2.new(0, 0, 0.5, 1),
                 Size = UDim2.fromOffset(SLIDER_BALL_SIZE, SLIDER_BALL_SIZE),
-                ZIndex = Bar.ZIndex + 1,
+                ZIndex = Bar.ZIndex + 3,
                 Parent = Bar,
             })
             New("UICorner", {
@@ -6102,11 +6139,16 @@ do
                 BackgroundColor3 = "FontColor",
                 Position = UDim2.fromScale(0, 0.5),
                 Size = UDim2.fromOffset(SLIDER_BALL_SIZE, SLIDER_BALL_SIZE),
-                ZIndex = Bar.ZIndex + 2,
+                ZIndex = Bar.ZIndex + 4,
                 Parent = Bar,
             })
             New("UICorner", {
                 CornerRadius = UDim.new(1, 0),
+                Parent = Ball,
+            })
+            New("UIStroke", {
+                Color = "DarkColor",
+                Transparency = 0.75,
                 Parent = Ball,
             })
         end
@@ -6158,6 +6200,7 @@ do
             if Ball then
                 Ball.BackgroundTransparency = Slider.Disabled and 0.5 or 0
                 BallShadow.BackgroundTransparency = Slider.Disabled and 1 or 0.55
+                Bar.BackgroundTransparency = Slider.Disabled and 0.6 or 0
             end
             
             if Info.AllowRightClickInput then

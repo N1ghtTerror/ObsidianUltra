@@ -139,9 +139,12 @@ accent colour with a gentler ramp. The ball is `FontColor` with a shadow beneath
 slides between the two ends.
 
 **Slider** puts its label top left and its value top right, above a pill shaped bar, with a
-ball riding the fill edge. The ball grows from 12px to 17px while hovered or dragged, on a
-Sine in-out curve, and has a shadow. It is nudged inward at the extremes so it never hangs
-off the end of the bar.
+ball riding the fill edge. The empty track is the same grey ramp as the switch; the filled
+part is the accent colour. The ball is **wider than the bar** — 18px against a 16px bar,
+growing to 24px while hovered or dragged on a Sine in-out curve — so it sits proud of the
+track, and the holder reserves margin for it to overflow into. It carries a shadow and a
+faint outline, and the bar has an inner outline: a ring inset by a pixel, since Roblox
+strokes sit outside the border and cannot be drawn inside one.
 
 `Compact = true` sliders are unchanged: no ball, and the value stays centred in the bar,
 since there is no room for the two row layout.
