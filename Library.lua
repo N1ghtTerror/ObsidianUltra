@@ -6170,7 +6170,8 @@ do
             })
         )
 
-        --// Grows the ball while hovered or dragged, per the design note
+        --// Grows the ball while hovered or dragged, per the design note. The fill
+        --// ends at the ball's centre, so it has to travel with it.
         local function SetBallActive(Active: boolean)
             if not Ball or BallActive == Active or Slider.Disabled then
                 return
@@ -6178,13 +6179,24 @@ do
 
             BallActive = Active
 
-            local Size = UDim2.fromOffset(
-                Active and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE,
-                Active and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE
-            )
+            local Diameter = Active and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE
+            local Size = UDim2.fromOffset(Diameter, Diameter)
 
-            TweenService:Create(Ball, SLIDER_BALL_TWEEN, { Size = Size }):Play()
-            TweenService:Create(BallShadow, SLIDER_BALL_TWEEN, { Size = Size }):Play()
+            local X = (Slider.Value - Slider.Min) / (Slider.Max - Slider.Min)
+            local Edge = UDim.new(X, (0.5 - X) * Diameter)
+            local Position = UDim2.new(Edge.Scale, Edge.Offset, 0.5, 0)
+
+            TweenService:Create(Ball, SLIDER_BALL_TWEEN, {
+                Size = Size,
+                Position = Position,
+            }):Play()
+            TweenService:Create(BallShadow, SLIDER_BALL_TWEEN, {
+                Size = Size,
+                Position = Position + UDim2.fromOffset(0, 1),
+            }):Play()
+            TweenService:Create(Fill, SLIDER_BALL_TWEEN, {
+                Size = UDim2.new(Edge.Scale, Edge.Offset, 1, 0),
+            }):Play()
         end
 
         function Slider:UpdateColors()
@@ -6243,16 +6255,24 @@ do
             end
 
             local X = (Slider.Value - Slider.Min) / (Slider.Max - Slider.Min)
-            Fill.Size = UDim2.fromScale(X, 1)
 
-            if Ball then
-                --// Nudged inward at the ends so the ball never hangs off the bar
-                local Size = BallActive and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE
-                local Position = UDim2.new(X, (0.5 - X) * Size, 0.5, 0)
-
-                Ball.Position = Position
-                BallShadow.Position = Position + UDim2.fromOffset(0, 1)
+            if not Ball then
+                Fill.Size = UDim2.fromScale(X, 1)
+                return
             end
+
+            --// Nudged inward at the ends so the ball never hangs off the bar
+            local Size = BallActive and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE
+            local Edge = UDim.new(X, (0.5 - X) * Size)
+
+            --// The fill runs to the middle of the ball rather than to the raw
+            --// value, so the ball always covers its rounded cap. Ending them at
+            --// different places leaves a notch between the two at low values.
+            Fill.Size = UDim2.new(Edge.Scale, Edge.Offset, 1, 0)
+
+            local Position = UDim2.new(Edge.Scale, Edge.Offset, 0.5, 0)
+            Ball.Position = Position
+            BallShadow.Position = Position + UDim2.fromOffset(0, 1)
         end
 
         function Slider:OnChanged(Func)

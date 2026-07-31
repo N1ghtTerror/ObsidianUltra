@@ -131,6 +131,10 @@ local ThemeManager = {
         ["Claude"] = {
             21,
             { FontColor = "f5f4ef", MainColor = "30302e", AccentColor = "d97757", BackgroundColor = "1f1e1d", OutlineColor = "46453f", BackgroundImage = "" },
+        },
+        ["Monochrome"] = {
+            22,
+            { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "8a8a8a", BackgroundColor = "121212", OutlineColor = "333333", BackgroundImage = "" },
         }
     }
 }
