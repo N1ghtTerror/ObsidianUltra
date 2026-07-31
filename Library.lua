@@ -1860,6 +1860,24 @@ local SUBTAB_HOVER_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.Easin
 --// Expanded dropdown panel open and close
 local DROPDOWN_EXPAND_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
+--// Toggle switch. The off track ramps between #505050 and #8A8A8A over a white
+--// FontColor; the gradient multiplies, so these are those greys as factors.
+local SWITCH_WIDTH = 38
+local SWITCH_TRACK_HEIGHT = 20
+local SWITCH_HEIGHT = 20
+local SWITCH_OFF_GRADIENT_FROM = Color3.fromRGB(80, 80, 80)
+local SWITCH_OFF_GRADIENT_TO = Color3.fromRGB(138, 138, 138)
+--// On keeps a gentler ramp so the track still has some depth
+local SWITCH_ON_GRADIENT_FROM = Color3.fromRGB(205, 205, 205)
+local SWITCH_ON_GRADIENT_TO = Color3.new(1, 1, 1)
+local SWITCH_BALL_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+--// Slider ball: grows when hovered or dragged, on a smooth in-out curve
+local SLIDER_BAR_HEIGHT = 18
+local SLIDER_BALL_SIZE = 12
+local SLIDER_BALL_SIZE_ACTIVE = 17
+local SLIDER_BALL_TWEEN = TweenInfo.new(0.16, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+
 --// Left padding of the search box text, leaving room for the icon
 local SEARCHBOX_TEXT_INSET = 38
 
@@ -4842,10 +4860,11 @@ do
                 Parent = Base,
             })
 
+            --// Pill shaped, matching the sliders and switches
             table.insert(
-                Library.Corners,
+                Library.PillCorners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius / 2),
+                    CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
                     Parent = Base,
                 })
             )
@@ -5419,7 +5438,7 @@ do
         local Button = New("TextButton", {
             Active = not Toggle.Disabled,
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 18),
+            Size = UDim2.new(1, 0, 0, SWITCH_HEIGHT),
             Text = "",
             Visible = Toggle.Visible,
             Parent = Container,
@@ -5427,7 +5446,7 @@ do
 
         local Label = New("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, -40, 1, 0),
+            Size = UDim2.new(1, -(SWITCH_WIDTH + 10), 1, 0),
             Text = Toggle.Text,
             TextSize = 14,
             TextTransparency = 0.4,
@@ -5443,10 +5462,10 @@ do
         })
 
         local Switch = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
-            BackgroundColor3 = "MainColor",
-            Position = UDim2.fromScale(1, 0),
-            Size = UDim2.fromOffset(32, 18),
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundColor3 = "FontColor",
+            Position = UDim2.new(1, 0, 0.5, 0),
+            Size = UDim2.fromOffset(SWITCH_WIDTH, SWITCH_TRACK_HEIGHT),
             Parent = Button,
         })
         New("UICorner", {
@@ -5462,14 +5481,48 @@ do
         })
         local SwitchStroke = New("UIStroke", {
             Color = "OutlineColor",
+            Transparency = 1,
             Parent = Switch,
         })
 
-        local Ball = New("Frame", {
-            BackgroundColor3 = "FontColor",
+        --// The off track is a grey ramp rather than a flat fill. The gradient
+        --// multiplies the track colour, so these factors land on #505050 -> #8A8A8A
+        --// against a white FontColor, and follow the theme otherwise.
+        local SwitchGradient = New("UIGradient", {
+            Color = ColorSequence.new(SWITCH_OFF_GRADIENT_FROM, SWITCH_OFF_GRADIENT_TO),
+            Parent = Switch,
+        })
+
+        --// Sits under the ball, so it has to be a sibling rather than a child
+        local BallHolder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Parent = Switch,
+        })
+
+        local BallShadow = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundColor3 = "DarkColor",
+            BackgroundTransparency = 0.6,
+            Position = UDim2.new(0, 0, 0.5, 1),
             Size = UDim2.fromScale(1, 1),
             SizeConstraint = Enum.SizeConstraint.RelativeYY,
-            Parent = Switch,
+            ZIndex = 1,
+            Parent = BallHolder,
+        })
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = BallShadow,
+        })
+
+        local Ball = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundColor3 = "FontColor",
+            Position = UDim2.fromScale(0, 0.5),
+            Size = UDim2.fromScale(1, 1),
+            SizeConstraint = Enum.SizeConstraint.RelativeYY,
+            ZIndex = 2,
+            Parent = BallHolder,
         })
         New("UICorner", {
             CornerRadius = UDim.new(1, 0),
@@ -5485,21 +5538,34 @@ do
                 return
             end
 
-            local Offset = Toggle.Value and 1 or 0
+            --// The ball is anchored at its centre, so it travels between the two
+            --// insets rather than 0 and 1
+            local BallRadius = (SWITCH_TRACK_HEIGHT - 4) / 2
+            local Offset = Toggle.Value and UDim2.new(1, -BallRadius, 0.5, 0) or UDim2.new(0, BallRadius, 0.5, 0)
 
-            Switch.BackgroundTransparency = Toggle.Disabled and 0.75 or 0
-            SwitchStroke.Transparency = Toggle.Disabled and 0.75 or 0
+            Switch.BackgroundTransparency = Toggle.Disabled and 0.6 or 0
+            SwitchStroke.Transparency = Toggle.Value and 1 or 0.8
 
-            Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.MainColor
-            SwitchStroke.Color = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
+            --// On reads as the accent, off as the grey ramp over the track colour
+            Switch.BackgroundColor3 = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.FontColor
+            Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "FontColor"
 
-            Library.Registry[Switch].BackgroundColor3 = Toggle.Value and "AccentColor" or "MainColor"
-            Library.Registry[SwitchStroke].Color = Toggle.Value and "AccentColor" or "OutlineColor"
+            SwitchStroke.Color = Library.Scheme.OutlineColor
+            Library.Registry[SwitchStroke].Color = "OutlineColor"
+
+            SwitchGradient.Color = Toggle.Value
+                and ColorSequence.new(SWITCH_ON_GRADIENT_FROM, SWITCH_ON_GRADIENT_TO)
+                or ColorSequence.new(SWITCH_OFF_GRADIENT_FROM, SWITCH_OFF_GRADIENT_TO)
+
+            Ball.BackgroundColor3 = Library.Scheme.FontColor
+            Library.Registry[Ball].BackgroundColor3 = "FontColor"
+
+            BallShadow.BackgroundTransparency = Toggle.Disabled and 1 or 0.6
 
             if Toggle.Disabled then
                 Label.TextTransparency = 0.8
-                Ball.AnchorPoint = Vector2.new(Offset, 0)
-                Ball.Position = UDim2.fromScale(Offset, 0)
+                Ball.Position = Offset
+                BallShadow.Position = Offset + UDim2.fromOffset(0, 1)
 
                 Ball.BackgroundColor3 = Library:GetDarkerColor(Library.Scheme.FontColor)
                 Library.Registry[Ball].BackgroundColor3 = function()
@@ -5512,13 +5578,12 @@ do
             TweenService:Create(Label, Library.TweenInfo, {
                 TextTransparency = Toggle.Value and 0 or 0.4,
             }):Play()
-            TweenService:Create(Ball, Library.TweenInfo, {
-                AnchorPoint = Vector2.new(Offset, 0),
-                Position = UDim2.fromScale(Offset, 0),
+            TweenService:Create(Ball, SWITCH_BALL_TWEEN, {
+                Position = Offset,
             }):Play()
-
-            Ball.BackgroundColor3 = Library.Scheme.FontColor
-            Library.Registry[Ball].BackgroundColor3 = "FontColor"
+            TweenService:Create(BallShadow, SWITCH_BALL_TWEEN, {
+                Position = Offset + UDim2.fromOffset(0, 1),
+            }):Play()
         end
 
         function Toggle:OnChanged(Func)
@@ -5920,20 +5985,29 @@ do
 
         local Holder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, Info.Compact and 15 or 33),
+            Size = UDim2.new(1, 0, 0, Info.Compact and 15 or (18 + SLIDER_BAR_HEIGHT)),
             Visible = Slider.Visible,
             Parent = Container,
         })
 
+        --// Label on the left and value on the right, both above the bar
         local SliderLabel
+        local TopRow
         if not Info.Compact then
-            SliderLabel = New("TextLabel", {
+            TopRow = New("Frame", {
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 0, 14),
+                Parent = Holder,
+            })
+
+            SliderLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -70, 1, 0),
                 Text = Slider.Text,
                 TextSize = 14,
+                TextTruncate = Enum.TextTruncate.AtEnd,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Holder,
+                Parent = TopRow,
             })
         end
 
@@ -5942,7 +6016,7 @@ do
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "MainColor",
             Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 15),
+            Size = UDim2.new(1, 0, 0, Info.Compact and 15 or SLIDER_BAR_HEIGHT),
             Text = "",
             Parent = Holder,
         })
@@ -5952,32 +6026,42 @@ do
             Parent = Bar,
         })
 
+        --// Compact keeps the value inside the bar; otherwise it sits top right
         local DisplayLabel = New("TextLabel", {
+            AnchorPoint = Info.Compact and Vector2.new(0, 0) or Vector2.new(1, 0),
             BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1),
+            Position = Info.Compact and UDim2.fromScale(0, 0) or UDim2.fromScale(1, 0),
+            Size = Info.Compact and UDim2.fromScale(1, 1) or UDim2.new(0, 70, 1, 0),
             Text = "",
             TextSize = 14,
-            ZIndex = Bar.ZIndex + 2,
-            Parent = Bar,
+            TextTransparency = Info.Compact and 0 or 0.4,
+            TextXAlignment = Info.Compact and Enum.TextXAlignment.Center or Enum.TextXAlignment.Right,
+            ZIndex = Bar.ZIndex + 3,
+            Parent = Info.Compact and Bar or TopRow,
         })
-        New("UIStroke", {
-            ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
-            Color = "DarkColor",
-            LineJoinMode = Enum.LineJoinMode.Miter,
-            Parent = DisplayLabel,
-        })
+        if Info.Compact then
+            New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+                Color = "DarkColor",
+                LineJoinMode = Enum.LineJoinMode.Miter,
+                Parent = DisplayLabel,
+            })
+        end
 
         local InputTextBox
         if Info.AllowRightClickInput then
             InputTextBox = New("TextBox", {
+                AnchorPoint = DisplayLabel.AnchorPoint,
                 BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
+                Position = DisplayLabel.Position,
+                Size = DisplayLabel.Size,
                 Text = "",
                 TextSize = 14,
-                ZIndex = Bar.ZIndex + 3,
+                TextXAlignment = DisplayLabel.TextXAlignment,
+                ZIndex = Bar.ZIndex + 4,
                 Visible = false,
                 ClearTextOnFocus = false,
-                Parent = Bar,
+                Parent = DisplayLabel.Parent,
             })
             New("UIStroke", {
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
@@ -5994,21 +6078,72 @@ do
             Parent = Bar,
         })
 
-        table.insert(
-            Library.Corners,
+        --// Ball riding the fill edge. Not shown in compact, which has no room.
+        local Ball
+        local BallShadow
+        local BallActive = false
+        if not Info.Compact then
+            BallShadow = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = "DarkColor",
+                BackgroundTransparency = 0.55,
+                Position = UDim2.new(0, 0, 0.5, 1),
+                Size = UDim2.fromOffset(SLIDER_BALL_SIZE, SLIDER_BALL_SIZE),
+                ZIndex = Bar.ZIndex + 1,
+                Parent = Bar,
+            })
             New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
+                CornerRadius = UDim.new(1, 0),
+                Parent = BallShadow,
+            })
+
+            Ball = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = "FontColor",
+                Position = UDim2.fromScale(0, 0.5),
+                Size = UDim2.fromOffset(SLIDER_BALL_SIZE, SLIDER_BALL_SIZE),
+                ZIndex = Bar.ZIndex + 2,
+                Parent = Bar,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(1, 0),
+                Parent = Ball,
+            })
+        end
+
+        --// Pill shaped bar and fill, squaring off with everything else at radius 0
+        table.insert(
+            Library.PillCorners,
+            New("UICorner", {
+                CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
                 Parent = Bar,
             })
         )
 
         table.insert(
-            Library.Corners,
+            Library.PillCorners,
             New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
+                CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
                 Parent = Fill,
             })
         )
+
+        --// Grows the ball while hovered or dragged, per the design note
+        local function SetBallActive(Active: boolean)
+            if not Ball or BallActive == Active or Slider.Disabled then
+                return
+            end
+
+            BallActive = Active
+
+            local Size = UDim2.fromOffset(
+                Active and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE,
+                Active and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE
+            )
+
+            TweenService:Create(Ball, SLIDER_BALL_TWEEN, { Size = Size }):Play()
+            TweenService:Create(BallShadow, SLIDER_BALL_TWEEN, { Size = Size }):Play()
+        end
 
         function Slider:UpdateColors()
             if Library.Unloaded then
@@ -6018,7 +6153,12 @@ do
             if SliderLabel then
                 SliderLabel.TextTransparency = Slider.Disabled and 0.8 or 0
             end
-            DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or 0
+            DisplayLabel.TextTransparency = Slider.Disabled and 0.8 or (Info.Compact and 0 or 0.4)
+
+            if Ball then
+                Ball.BackgroundTransparency = Slider.Disabled and 0.5 or 0
+                BallShadow.BackgroundTransparency = Slider.Disabled and 1 or 0.55
+            end
             
             if Info.AllowRightClickInput then
                 InputTextBox.TextTransparency = Slider.Disabled and 0.8 or 0
@@ -6061,6 +6201,15 @@ do
 
             local X = (Slider.Value - Slider.Min) / (Slider.Max - Slider.Min)
             Fill.Size = UDim2.fromScale(X, 1)
+
+            if Ball then
+                --// Nudged inward at the ends so the ball never hangs off the bar
+                local Size = BallActive and SLIDER_BALL_SIZE_ACTIVE or SLIDER_BALL_SIZE
+                local Position = UDim2.new(X, (0.5 - X) * Size, 0.5, 0)
+
+                Ball.Position = Position
+                BallShadow.Position = Position + UDim2.fromOffset(0, 1)
+            end
         end
 
         function Slider:OnChanged(Func)
@@ -6233,6 +6382,8 @@ do
                 Library.ActiveLoading.Sidebar.Container.ScrollingEnabled = false
             end
 
+            SetBallActive(true)
+
             while IsDragInput(Input) and not Slider.Destroyed do
                 local Location = Mouse.X
                 local Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
@@ -6255,7 +6406,30 @@ do
             if Library.ActiveLoading and Library.ActiveLoading.Sidebar then
                 Library.ActiveLoading.Sidebar.Container.ScrollingEnabled = true
             end
+
+            --// Stay grown if the cursor is still over the bar after the drag
+            SetBallActive(Library:MouseIsOverFrame(Bar, Mouse))
         end))
+
+        if Ball then
+            table.insert(
+                Slider.Connections,
+                Bar.MouseEnter:Connect(function()
+                    SetBallActive(true)
+                end)
+            )
+            table.insert(
+                Slider.Connections,
+                Bar.MouseLeave:Connect(function()
+                    --// A drag that left the bar keeps it grown until the mouse is up
+                    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                        return
+                    end
+
+                    SetBallActive(false)
+                end)
+            )
+        end
 
         if typeof(Slider.Tooltip) == "string" or typeof(Slider.DisabledTooltip) == "string" then
             Slider.TooltipTable = Library:AddTooltip(Slider.Tooltip, Slider.DisabledTooltip, Bar)
