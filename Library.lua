@@ -9,6 +9,7 @@ local UserInputService: UserInputService = cloneref(game:GetService("UserInputSe
 local TextService: TextService = cloneref(game:GetService("TextService"))
 local Teams: Teams = cloneref(game:GetService("Teams"))
 local TweenService: TweenService = cloneref(game:GetService("TweenService"))
+local LogService: LogService = cloneref(game:GetService("LogService"))
 
 local getgenv = getgenv or function()
     return shared
@@ -177,6 +178,8 @@ local Library = {
     SearchText = "",
     Searching = false,
     GlobalSearch = false,
+    FuzzySearch = true,
+    SearchValues = true,
     LastSearchTab = nil,
 
     --// Tabs \\--
@@ -276,6 +279,7 @@ local Library = {
 
         RedColor = Color3.fromRGB(255, 50, 50),
         BlueColor = Color3.fromRGB(80, 155, 255),
+        YellowColor = Color3.fromRGB(255, 200, 60),
         DestructiveColor = Color3.fromRGB(220, 38, 38),
         DarkColor = Color3.new(0, 0, 0),
         WhiteColor = Color3.new(1, 1, 1),
@@ -374,6 +378,15 @@ local Templates = {
 
         SearchbarSize = UDim2.fromScale(0.35, 1),
         GlobalSearch = false,
+        FuzzySearch = true,
+        SearchValues = true,
+        SearchKeybind = Enum.KeyCode.F,
+        DisableSearchKeybind = false,
+
+        Console = false,
+        ConsoleKeybind = Enum.KeyCode.F9,
+        ConsoleCaptureOutput = true,
+        ConsoleMaxLines = 500,
 
         CornerRadius = 4,
         NotifySide = "Right",
@@ -756,6 +769,161 @@ function Library:UpdateDependencyBoxes()
     end
 end
 
+--// Search \\--
+--// How many dropdown entries a single element is willing to scan per keystroke.
+local MaxSearchedValues = 100
+
+--// Every character of Needle shows up in Haystack in order, gaps allowed.
+--// Whitespace in the needle is ignored so "auto farm" still reaches "AutoFarm".
+local function IsSubsequence(Haystack: string, Needle: string): boolean
+    local HaystackLen = #Haystack
+    local Index = 1
+
+    for Position = 1, #Needle do
+        local Char = Needle:sub(Position, Position)
+
+        if Char == " " then
+            continue
+        end
+
+        local Found = Haystack:find(Char, Index, true)
+        if not Found then
+            return false
+        end
+
+        Index = Found + 1
+        if Index > HaystackLen + 1 then
+            return false
+        end
+    end
+
+    return true
+end
+
+--// Literal first, fuzzy only as a fallback. Search is already lowercased by the caller.
+local function TextMatches(Text, Search: string): boolean
+    if Search == "" then
+        return true
+    end
+    if typeof(Text) ~= "string" or Text == "" then
+        return false
+    end
+
+    local Lowered = Text:lower()
+
+    --// Plain find: the query is text, never a Lua pattern
+    if Lowered:find(Search, 1, true) then
+        return true
+    end
+
+    if not Library.FuzzySearch then
+        return false
+    end
+
+    --// Fuzzy on a single character matches almost everything, so don't
+    local Stripped = Search:gsub("%s", "")
+    if #Stripped < 2 then
+        return false
+    end
+
+    return IsSubsequence(Lowered, Search)
+end
+
+--// Dropdown values can be Instances or EnumItems, and the script may reformat them
+local function FormatSearchValue(ElementInfo, Value): string?
+    if Value == nil then
+        return nil
+    end
+
+    --// The list formatter is what the user actually reads in the menu
+    local Formatter = ElementInfo.FormatListValue or ElementInfo.FormatDisplayValue
+    if Formatter then
+        local Success, Formatted = pcall(Formatter, Value)
+        if Success and Formatted ~= nil then
+            return tostring(Formatted)
+        end
+    end
+
+    local Success, Text = pcall(tostring, Value)
+    return Success and Text or nil
+end
+
+--// Values attached to an element, not just its label. Never errors: element tables
+--// are plain Lua tables and any field may be missing.
+local function ValueMatches(ElementInfo, Search: string): boolean
+    local Type = ElementInfo.Type
+
+    if Type == "Dropdown" then
+        local Scanned = 0
+
+        if typeof(ElementInfo.Values) == "table" then
+            for _, Value in ElementInfo.Values do
+                Scanned += 1
+                if Scanned > MaxSearchedValues then
+                    break
+                end
+
+                if TextMatches(FormatSearchValue(ElementInfo, Value), Search) then
+                    return true
+                end
+            end
+        end
+
+        --// Current selection: a set when Multi, a single value otherwise
+        local Value = ElementInfo.Value
+        if ElementInfo.Multi and typeof(Value) == "table" then
+            for Selected, Active in Value do
+                if Active and TextMatches(FormatSearchValue(ElementInfo, Selected), Search) then
+                    return true
+                end
+            end
+        elseif Value ~= nil and TextMatches(FormatSearchValue(ElementInfo, Value), Search) then
+            return true
+        end
+
+        return false
+    elseif Type == "Input" then
+        return TextMatches(ElementInfo.Value, Search)
+    elseif Type == "KeyPicker" then
+        return TextMatches(ElementInfo.Value, Search) or TextMatches(ElementInfo.Mode, Search)
+    end
+
+    return false
+end
+
+--// The one place an element is tested against the searchbar.
+function Library:MatchesSearch(ElementInfo, Search: string): boolean
+    if typeof(ElementInfo) ~= "table" then
+        return false
+    end
+    if typeof(Search) ~= "string" or Trim(Search) == "" then
+        return true
+    end
+
+    if TextMatches(ElementInfo.Text, Search) then
+        return true
+    end
+
+    if not Library.SearchValues then
+        return false
+    end
+
+    if ValueMatches(ElementInfo, Search) then
+        return true
+    end
+
+    --// KeyPickers and ColorPickers hang off their parent element
+    if typeof(ElementInfo.Addons) == "table" then
+        for _, Addon in ElementInfo.Addons do
+            if typeof(Addon) == "table" and ValueMatches(Addon, Search) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 local function CheckDepbox(Box, Search)
     local VisibleElements = 0
 
@@ -768,12 +936,12 @@ local function CheckDepbox(Box, Search)
             local Visible = false
 
             --// Check if Search matches Element's Name and if Element is Visible
-            if ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+            if Library:MatchesSearch(ElementInfo, Search) and ElementInfo.Visible then
                 Visible = true
             else
                 ElementInfo.Base.Visible = false
             end
-            if ElementInfo.SubButton.Text:lower():match(Search) and ElementInfo.SubButton.Visible then
+            if Library:MatchesSearch(ElementInfo.SubButton, Search) and ElementInfo.SubButton.Visible then
                 Visible = true
             else
                 ElementInfo.SubButton.Base.Visible = false
@@ -787,7 +955,7 @@ local function CheckDepbox(Box, Search)
         end
 
         --// Check if Search matches Element's Name and if Element is Visible
-        if ElementInfo.Text and ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+        if Library:MatchesSearch(ElementInfo, Search) and ElementInfo.Visible then
             ElementInfo.Holder.Visible = true
             VisibleElements += 1
         else
@@ -828,6 +996,9 @@ local function RestoreDepbox(Box)
     end
 end
 
+--// Forward declared: a Sub Tab whose name matches is restored wholesale
+local ResetTab
+
 local function ApplySearchToTab(Tab, Search)
     if not Tab then
         return
@@ -841,22 +1012,28 @@ local function ApplySearchToTab(Tab, Search)
             continue
         end
 
+        --// Matching the Groupbox's own name keeps everything the script left visible
+        local BoxMatched = TextMatches(Groupbox.Name, Search)
+
         local VisibleElements = 0
         for _, ElementInfo in Groupbox.Elements do
             if ElementInfo.Type == "Divider" then
-                ElementInfo.Holder.Visible = false
+                ElementInfo.Holder.Visible = BoxMatched and ElementInfo.Visible ~= false
                 continue
             elseif ElementInfo.SubButton then
                 --// Check if any of the Buttons Name matches with Search
                 local Visible = false
 
                 --// Check if Search matches Element's Name and if Element is Visible
-                if ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+                if (BoxMatched or Library:MatchesSearch(ElementInfo, Search)) and ElementInfo.Visible then
                     Visible = true
                 else
                     ElementInfo.Base.Visible = false
                 end
-                if ElementInfo.SubButton.Text:lower():match(Search) and ElementInfo.SubButton.Visible then
+                if
+                    (BoxMatched or Library:MatchesSearch(ElementInfo.SubButton, Search))
+                    and ElementInfo.SubButton.Visible
+                then
                     Visible = true
                 else
                     ElementInfo.SubButton.Base.Visible = false
@@ -871,7 +1048,7 @@ local function ApplySearchToTab(Tab, Search)
             end
 
             --// Check if Search matches Element's Name and if Element is Visible
-            if ElementInfo.Text and ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+            if (BoxMatched or Library:MatchesSearch(ElementInfo, Search)) and ElementInfo.Visible then
                 ElementInfo.Holder.Visible = true
                 VisibleElements += 1
             else
@@ -902,21 +1079,27 @@ local function ApplySearchToTab(Tab, Search)
         for _, SubTab in Tabbox.Tabs do
             VisibleElements[SubTab] = 0
 
+            --// Matching the tab's own name keeps everything the script left visible
+            local BoxMatched = TextMatches(SubTab.Name, Search)
+
             for _, ElementInfo in SubTab.Elements do
                 if ElementInfo.Type == "Divider" then
-                    ElementInfo.Holder.Visible = false
+                    ElementInfo.Holder.Visible = BoxMatched and ElementInfo.Visible ~= false
                     continue
                 elseif ElementInfo.SubButton then
                     --// Check if any of the Buttons Name matches with Search
                     local Visible = false
 
                     --// Check if Search matches Element's Name and if Element is Visible
-                    if ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+                    if (BoxMatched or Library:MatchesSearch(ElementInfo, Search)) and ElementInfo.Visible then
                         Visible = true
                     else
                         ElementInfo.Base.Visible = false
                     end
-                    if ElementInfo.SubButton.Text:lower():match(Search) and ElementInfo.SubButton.Visible then
+                    if
+                        (BoxMatched or Library:MatchesSearch(ElementInfo.SubButton, Search))
+                        and ElementInfo.SubButton.Visible
+                    then
                         Visible = true
                     else
                         ElementInfo.SubButton.Base.Visible = false
@@ -930,7 +1113,7 @@ local function ApplySearchToTab(Tab, Search)
                 end
 
                 --// Check if Search matches Element's Name and if Element is Visible
-                if ElementInfo.Text and ElementInfo.Text:lower():match(Search) and ElementInfo.Visible then
+                if (BoxMatched or Library:MatchesSearch(ElementInfo, Search)) and ElementInfo.Visible then
                     ElementInfo.Holder.Visible = true
                     VisibleElements[SubTab] += 1
                 else
@@ -970,7 +1153,14 @@ local function ApplySearchToTab(Tab, Search)
         local VisibleSubTabs = {}
 
         for _, SubTab in Tab.SubTabs do
-            local SubVisible = ApplySearchToTab(SubTab, Search)
+            local SubVisible
+            if TextMatches(SubTab.Name, Search) then
+                --// The Sub Tab itself is the hit, so show all of its contents
+                ResetTab(SubTab)
+                SubVisible = true
+            else
+                SubVisible = ApplySearchToTab(SubTab, Search)
+            end
             VisibleSubTabs[SubTab] = SubVisible
 
             SubTab.Button.Visible = SubVisible
@@ -993,7 +1183,7 @@ local function ApplySearchToTab(Tab, Search)
 
     return HasVisible
 end
-local function ResetTab(Tab)
+function ResetTab(Tab)
     if not Tab then
         return
     end
@@ -6573,6 +6763,10 @@ do
             Multi = Info.Multi,
             DragSelect = Info.Multi and not Library.IsMobile and Info.DragSelect == true,
 
+            --// Kept on the table so search can read values the way the user sees them
+            FormatListValue = Info.FormatListValue,
+            FormatDisplayValue = Info.FormatDisplayValue,
+
             SpecialType = Info.SpecialType,
             ExcludeLocalPlayer = Info.ExcludeLocalPlayer,
             EnablePlayerImages = Info.EnablePlayerImages,
@@ -6984,7 +7178,7 @@ do
                 ProcessedCount += 1
 
                 local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
-                if SearchBox and not FormattedValue:lower():match(SearchBox.Text:lower()) then
+                if SearchBox and not TextMatches(FormattedValue, SearchBox.Text:lower()) then
                     continue
                 end
 
@@ -7510,7 +7704,7 @@ do
 
             for _, Value in Dropdown.Values do
                 local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
-                if Search ~= "" and not FormattedValue:lower():match(Search) then
+                if Search ~= "" and not TextMatches(FormattedValue, Search) then
                     continue
                 end
 
@@ -9254,6 +9448,582 @@ function Library:Notify(...)
     return Data
 end
 
+--// Console \\--
+--// An in-UI log panel. Script authors get print/warn/error visibility without
+--// hand rolling one, and a copy button so "send me your console" stops being a chore.
+local SEVERITY_ORDER = { "Output", "Info", "Warning", "Error" }
+local SEVERITY_COLORS = {
+    Output = "FontColor",
+    Info = "BlueColor",
+    Warning = "YellowColor",
+    Error = "RedColor",
+}
+local MESSAGE_TYPE_SEVERITY = {
+    [Enum.MessageType.MessageOutput] = "Output",
+    [Enum.MessageType.MessageInfo] = "Info",
+    [Enum.MessageType.MessageWarning] = "Warning",
+    [Enum.MessageType.MessageError] = "Error",
+}
+
+local Console = {
+    Enabled = false,
+    Visible = false,
+    MaxLines = 500,
+
+    --// { Text, Severity, Stamp, Label }
+    Lines = {},
+    Pending = {},
+    UnreadErrors = 0,
+
+    Filters = {
+        Output = true,
+        Info = true,
+        Warning = true,
+        Error = true,
+    },
+
+    --// Set while emitting so a captured message can never re-enter Log
+    Emitting = false,
+    Pinned = true,
+    Built = false,
+    Flushing = false,
+
+    Holder = nil,
+    List = nil,
+    SearchBox = nil,
+    TitleLabel = nil,
+    LogConnection = nil,
+}
+Library.Console = Console
+
+local function ConsoleStamp(): string
+    return os.date("%H:%M:%S")
+end
+
+--// A line survives the filters when its severity is on and it matches the query
+local function ConsoleLineShown(Line): boolean
+    if not Console.Filters[Line.Severity] then
+        return false
+    end
+
+    local Query = Console.SearchBox and Console.SearchBox.Text:lower() or ""
+    if Query == "" then
+        return true
+    end
+
+    return Line.Text:lower():find(Query, 1, true) ~= nil
+end
+
+local function ConsoleUpdateTitle()
+    if not Console.TitleLabel then
+        return
+    end
+
+    local Suffix = ""
+    if Console.UnreadErrors > 0 and not Console.Visible then
+        Suffix = string.format("  (%d)", Console.UnreadErrors)
+    end
+
+    Console.TitleLabel.Text = string.format("Console  [%d]%s", #Console.Lines, Suffix)
+end
+
+local function ConsoleRefreshFilters()
+    for _, Line in Console.Lines do
+        if Line.Label then
+            Line.Label.Visible = ConsoleLineShown(Line)
+        end
+    end
+end
+
+local function ConsoleScrollToBottom()
+    local List = Console.List
+    if not List then
+        return
+    end
+
+    task.defer(function()
+        if Console.List ~= List or not List.Parent then
+            return
+        end
+
+        List.CanvasPosition = Vector2.new(0, math.max(0, List.AbsoluteCanvasSize.Y - List.AbsoluteWindowSize.Y))
+    end)
+end
+
+local function ConsoleCreateLabel(Line)
+    local Label = New("TextLabel", {
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        --// Game output is untrusted text, so never let it be parsed as markup
+        RichText = false,
+        Size = UDim2.new(1, 0, 0, 0),
+        Text = string.format("%s  %s", Line.Stamp, Line.Text),
+        TextColor3 = SEVERITY_COLORS[Line.Severity] or "FontColor",
+        TextSize = 13,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Visible = ConsoleLineShown(Line),
+        Parent = Console.List,
+    })
+
+    Line.Label = Label
+    return Label
+end
+
+--// Appends are batched: a game spewing output must not build one instance per message
+local function ConsoleFlush()
+    Console.Flushing = false
+
+    if not Console.Built or Library.Unloaded then
+        return
+    end
+
+    local Pending = Console.Pending
+    if #Pending == 0 then
+        return
+    end
+    Console.Pending = {}
+
+    for _, Line in Pending do
+        table.insert(Console.Lines, Line)
+        ConsoleCreateLabel(Line)
+    end
+
+    --// Evict from the front, destroying instances rather than hiding them
+    local Overflow = #Console.Lines - Console.MaxLines
+    for _ = 1, Overflow do
+        local Line = table.remove(Console.Lines, 1)
+        if Line and Line.Label then
+            Line.Label:Destroy()
+        end
+    end
+
+    ConsoleUpdateTitle()
+
+    if Console.Pinned then
+        ConsoleScrollToBottom()
+    end
+end
+
+local function ConsoleQueueFlush()
+    if Console.Flushing then
+        return
+    end
+
+    Console.Flushing = true
+    task.defer(ConsoleFlush)
+end
+
+function Console:Log(Text, Severity: string?)
+    if Library.Unloaded then
+        return
+    end
+
+    local Line = {
+        Text = tostring(Text),
+        Severity = SEVERITY_COLORS[Severity] and Severity or "Output",
+        Stamp = ConsoleStamp(),
+        Label = nil,
+    }
+
+    if Line.Severity == "Error" and not Console.Visible then
+        Console.UnreadErrors += 1
+    end
+
+    table.insert(Console.Pending, Line)
+
+    --// Bound the backlog even when the panel has never been built
+    while #Console.Pending > Console.MaxLines do
+        table.remove(Console.Pending, 1)
+    end
+
+    if Console.Built then
+        ConsoleQueueFlush()
+    end
+end
+
+local function ConsoleConcat(...): string
+    local Count = select("#", ...)
+    local Parts = table.create(Count)
+
+    for Index = 1, Count do
+        Parts[Index] = tostring((select(Index, ...)))
+    end
+
+    return table.concat(Parts, " ")
+end
+
+function Console:Info(...)
+    Console:Log(ConsoleConcat(...), "Info")
+end
+
+function Console:Warn(...)
+    Console:Log(ConsoleConcat(...), "Warning")
+end
+
+function Console:Error(...)
+    Console:Log(ConsoleConcat(...), "Error")
+end
+
+function Console:Clear()
+    for _, Line in Console.Lines do
+        if Line.Label then
+            Line.Label:Destroy()
+        end
+    end
+
+    table.clear(Console.Lines)
+    table.clear(Console.Pending)
+    Console.UnreadErrors = 0
+    ConsoleUpdateTitle()
+end
+
+function Console:GetText(): string
+    local Parts = {}
+
+    for _, Line in Console.Lines do
+        if ConsoleLineShown(Line) then
+            table.insert(Parts, string.format("[%s] [%s] %s", Line.Stamp, Line.Severity, Line.Text))
+        end
+    end
+
+    return table.concat(Parts, "\n")
+end
+
+function Console:Copy(): boolean
+    if not SetClipboard then
+        return false
+    end
+
+    return (pcall(SetClipboard, Console:GetText()))
+end
+
+function Console:SetVisible(Value: boolean)
+    Console.Visible = Value and true or false
+
+    if Console.Holder then
+        Console.Holder.Visible = Console.Visible
+    end
+
+    if Console.Visible then
+        Console.UnreadErrors = 0
+        ConsoleFlush()
+        ConsoleScrollToBottom()
+    end
+
+    ConsoleUpdateTitle()
+end
+
+function Console:Show()
+    Console:SetVisible(true)
+end
+
+function Console:Hide()
+    Console:SetVisible(false)
+end
+
+function Console:Toggle()
+    Console:SetVisible(not Console.Visible)
+end
+
+function Console:Destroy()
+    if Console.LogConnection then
+        Console.LogConnection:Disconnect()
+        Console.LogConnection = nil
+    end
+
+    if Console.Holder then
+        Console.Holder:Destroy()
+    end
+
+    table.clear(Console.Lines)
+    table.clear(Console.Pending)
+
+    Console.Holder = nil
+    Console.List = nil
+    Console.SearchBox = nil
+    Console.TitleLabel = nil
+    Console.Built = false
+    Console.Enabled = false
+    Console.Visible = false
+    Console.UnreadErrors = 0
+end
+
+function Console:Capture()
+    if Console.LogConnection then
+        return
+    end
+
+    --// Restricted in some executor environments, so failure here is not fatal
+    pcall(function()
+        Console.LogConnection = Library:GiveSignal(
+            LogService.MessageOut:Connect(function(Message: string, MessageType: Enum.MessageType)
+                if Console.Emitting then
+                    return
+                end
+
+                Console.Emitting = true
+                Console:Log(Message, MESSAGE_TYPE_SEVERITY[MessageType] or "Output")
+                Console.Emitting = false
+            end)
+        )
+    end)
+end
+
+function Console:Build(WindowInfo)
+    if Console.Built then
+        return
+    end
+    Console.Built = true
+
+    local Radius = Library.CornerRadius
+
+    local Holder = New("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        Position = UDim2.fromScale(0.5, 0.5),
+        --// Matches Library.MinSize so the first resize drag does not snap
+        Size = UDim2.fromOffset(560, 360),
+        Visible = false,
+        ZIndex = 20,
+        Parent = ScreenGui,
+    })
+    Console.Holder = Holder
+
+    table.insert(
+        Library.Corners,
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Radius),
+            Parent = Holder,
+        })
+    )
+    New("UIStroke", {
+        Color = "OutlineColor",
+        Parent = Holder,
+    })
+
+    --// Title bar \\--
+    local TitleBar = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 28),
+        Parent = Holder,
+    })
+
+    local TitleLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(10, 0),
+        Size = UDim2.new(1, -44, 1, 0),
+        Text = "Console  [0]",
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = TitleBar,
+    })
+    Console.TitleLabel = TitleLabel
+
+    local CloseButton = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -8, 0.5, 0),
+        Size = UDim2.fromOffset(20, 20),
+        Text = "X",
+        TextSize = 14,
+        TextTransparency = 0.4,
+        Parent = TitleBar,
+    })
+    CloseButton.MouseButton1Click:Connect(function()
+        Console:Hide()
+    end)
+
+    Library:MakeLine(Holder, {
+        Position = UDim2.fromOffset(0, 28),
+        Size = UDim2.new(1, 0, 0, 1),
+    })
+
+    --// Toolbar \\--
+    local Toolbar = New("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 29),
+        Size = UDim2.new(1, 0, 0, 28),
+        Parent = Holder,
+    })
+    New("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 6),
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        Parent = Toolbar,
+    })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        Parent = Toolbar,
+    })
+
+    local SearchBox = New("TextBox", {
+        BackgroundColor3 = "MainColor",
+        LayoutOrder = 0,
+        PlaceholderText = "Filter...",
+        Size = UDim2.new(0, 150, 0, 20),
+        Text = "",
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Toolbar,
+    })
+    Console.SearchBox = SearchBox
+    table.insert(
+        Library.PillCorners,
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = SearchBox,
+        })
+    )
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        Parent = SearchBox,
+    })
+    SearchBox:GetPropertyChangedSignal("Text"):Connect(ConsoleRefreshFilters)
+
+    --// Severity pills \\--
+    for Index, Severity in SEVERITY_ORDER do
+        local Pill = New("TextButton", {
+            BackgroundColor3 = "MainColor",
+            LayoutOrder = Index,
+            Size = UDim2.fromOffset(58, 20),
+            Text = Severity,
+            TextColor3 = SEVERITY_COLORS[Severity],
+            TextSize = 12,
+            Parent = Toolbar,
+        })
+        table.insert(
+            Library.PillCorners,
+            New("UICorner", {
+                CornerRadius = UDim.new(1, 0),
+                Parent = Pill,
+            })
+        )
+
+        local function Sync()
+            Pill.TextTransparency = Console.Filters[Severity] and 0 or 0.65
+            Pill.BackgroundTransparency = Console.Filters[Severity] and 0 or 0.5
+        end
+        Sync()
+
+        Pill.MouseButton1Click:Connect(function()
+            Console.Filters[Severity] = not Console.Filters[Severity]
+            Sync()
+            ConsoleRefreshFilters()
+        end)
+    end
+
+    --// Copy / Clear \\--
+    if SetClipboard then
+        local CopyButton = New("TextButton", {
+            BackgroundColor3 = "MainColor",
+            LayoutOrder = 90,
+            Size = UDim2.fromOffset(52, 20),
+            Text = "Copy",
+            TextSize = 12,
+            Parent = Toolbar,
+        })
+        table.insert(
+            Library.PillCorners,
+            New("UICorner", {
+                CornerRadius = UDim.new(1, 0),
+                Parent = CopyButton,
+            })
+        )
+
+        local ResetThread
+        CopyButton.MouseButton1Click:Connect(function()
+            if not Console:Copy() then
+                return
+            end
+
+            CopyButton.Text = "Copied"
+            if ResetThread then
+                task.cancel(ResetThread)
+            end
+
+            ResetThread = task.delay(1.5, function()
+                ResetThread = nil
+                CopyButton.Text = "Copy"
+            end)
+        end)
+    end
+
+    local ClearButton = New("TextButton", {
+        BackgroundColor3 = "MainColor",
+        LayoutOrder = 91,
+        Size = UDim2.fromOffset(52, 20),
+        Text = "Clear",
+        TextColor3 = "RedColor",
+        TextSize = 12,
+        Parent = Toolbar,
+    })
+    table.insert(
+        Library.PillCorners,
+        New("UICorner", {
+            CornerRadius = UDim.new(1, 0),
+            Parent = ClearButton,
+        })
+    )
+    ClearButton.MouseButton1Click:Connect(function()
+        Console:Clear()
+    end)
+
+    --// Body \\--
+    local List = New("ScrollingFrame", {
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        CanvasSize = UDim2.fromScale(0, 0),
+        Position = UDim2.fromOffset(0, 58),
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = "OutlineColor",
+        Size = UDim2.new(1, 0, 1, -58),
+        Parent = Holder,
+    })
+    Console.List = List
+    New("UIListLayout", {
+        Padding = UDim.new(0, 2),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = List,
+    })
+    New("UIPadding", {
+        PaddingBottom = UDim.new(0, 6),
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        PaddingTop = UDim.new(0, 6),
+        Parent = List,
+    })
+
+    --// Stick to the bottom only while the user is already there
+    List:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+        local Max = math.max(0, List.AbsoluteCanvasSize.Y - List.AbsoluteWindowSize.Y)
+        Console.Pinned = (Max - List.CanvasPosition.Y) <= 24
+    end)
+
+    Library:MakeDraggable(Holder, TitleBar, true)
+
+    if not WindowInfo or WindowInfo.Resizable then
+        --// Grip in the bottom right corner, same idea as the main window
+        local ResizeButton = New("TextButton", {
+            AnchorPoint = Vector2.new(1, 1),
+            BackgroundTransparency = 1,
+            Position = UDim2.fromScale(1, 1),
+            Size = UDim2.fromOffset(14, 14),
+            Text = "",
+            ZIndex = 21,
+            Parent = Holder,
+        })
+
+        Library:MakeResizable(Holder, ResizeButton)
+    end
+
+    ConsoleFlush()
+    ConsoleUpdateTitle()
+end
+
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
     local ViewportSize: Vector2 = workspace.CurrentCamera.ViewportSize
@@ -9298,7 +10068,19 @@ function Library:CreateWindow(WindowInfo)
     Library.Scheme.Font = WindowInfo.Font
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
     Library.GlobalSearch = WindowInfo.GlobalSearch
-    
+    Library.FuzzySearch = WindowInfo.FuzzySearch
+    Library.SearchValues = WindowInfo.SearchValues
+
+    if WindowInfo.Console then
+        Console.Enabled = true
+        Console.MaxLines = math.max(1, tonumber(WindowInfo.ConsoleMaxLines) or 500)
+        Console:Build(WindowInfo)
+
+        if WindowInfo.ConsoleCaptureOutput then
+            Console:Capture()
+        end
+    end
+
     Library.Animations = WindowInfo.Animations
     Library.TabTransitionInfo = TweenInfo.new(
         math.max(0, WindowInfo.TabTransitionTime or 0.22),
@@ -9574,6 +10356,106 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromOffset(16, 16),
                 Parent = SearchBox,
             })
+        end
+
+        --// Ctrl+F focuses the searchbar, Escape clears and releases it \\--
+        if not (WindowInfo.DisableSearch or WindowInfo.DisableSearchKeybind) then
+            Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject, Processed: boolean)
+                if Library.Unloaded or Input.UserInputType ~= Enum.UserInputType.Keyboard then
+                    return
+                end
+
+                --// Checked before the Processed guard: keyboard input is reported as
+                --// processed while a TextBox holds focus, which is exactly when this applies
+                if Input.KeyCode == Enum.KeyCode.Escape then
+                    if UserInputService:GetFocusedTextBox() == SearchBox then
+                        SearchBox.Text = ""
+                        SearchBox:ReleaseFocus()
+                    end
+
+                    return
+                end
+
+                if Processed or not Library.Toggled then
+                    return
+                end
+
+                if Input.KeyCode ~= WindowInfo.SearchKeybind then
+                    return
+                end
+
+                local CtrlHeld = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+                if not CtrlHeld then
+                    return
+                end
+
+                --// Never steal focus from a text box the user is already typing in
+                local Focused = UserInputService:GetFocusedTextBox()
+                if Focused and Focused ~= SearchBox then
+                    return
+                end
+
+                SearchBox:CaptureFocus()
+            end))
+        end
+
+        --// Console toggle: header button plus a keybind \\--
+        if WindowInfo.Console then
+            local ConsoleIcon = Library:GetIcon("terminal") or Library:GetIcon("code")
+
+            local ConsoleButton = New("TextButton", {
+                BackgroundColor3 = "MainColor",
+                LayoutOrder = 5,
+                Size = UDim2.fromOffset(24, 24),
+                Text = ConsoleIcon and "" or ">_",
+                TextSize = 12,
+                Parent = TopBar,
+            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = ConsoleButton,
+                })
+            )
+
+            if ConsoleIcon then
+                New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Image = ConsoleIcon.Url,
+                    ImageColor3 = "FontColor",
+                    ImageRectOffset = ConsoleIcon.ImageRectOffset,
+                    ImageRectSize = ConsoleIcon.ImageRectSize,
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromOffset(16, 16),
+                    Parent = ConsoleButton,
+                })
+            end
+
+            Library:AddTooltip("Toggle the console", nil, ConsoleButton)
+            ConsoleButton.MouseButton1Click:Connect(function()
+                Console:Toggle()
+            end)
+
+            Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject, Processed: boolean)
+                if Processed or Library.Unloaded then
+                    return
+                end
+                if Input.UserInputType ~= Enum.UserInputType.Keyboard then
+                    return
+                end
+                if Input.KeyCode ~= WindowInfo.ConsoleKeybind then
+                    return
+                end
+                --// Never fire while the user is typing somewhere
+                if UserInputService:GetFocusedTextBox() then
+                    return
+                end
+
+                Console:Toggle()
+            end))
         end
 
         if MoveIcon then
@@ -10641,6 +11523,7 @@ function Library:CreateWindow(WindowInfo)
                     Connections = {},
                     Destroyed = false,
 
+                    Name = Name,
                     ButtonHolder = Button,
                     Container = Container,
                     ButtonCorner = ButtonCorner,
@@ -10906,6 +11789,7 @@ function Library:CreateWindow(WindowInfo)
 
             local Groupbox = {
                 Type = "Groupbox",
+                Name = Info.Name,
 
                 Connections = {},
                 Destroyed = false,
@@ -12758,7 +13642,14 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Library:Toggle(Value: boolean?)
-        return Window:Toggle(Value)
+        local Result = Window:Toggle(Value)
+
+        --// The console rides along with the main window rather than floating alone
+        if Console.Enabled and not Library.Toggled and Console.Visible then
+            Console:Hide()
+        end
+
+        return Result
     end
 
     if WindowInfo.EnableSidebarResize then
@@ -13627,6 +14518,11 @@ Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 function Library:Unload()
     Library.Unloaded = true
+
+    --// Tear the console down before the signals go, it owns one of them
+    if Library.Console then
+        Library.Console:Destroy()
+    end
 
     --// Disconnect connections
     for Index = #Library.Signals, 1, -1 do

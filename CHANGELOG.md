@@ -1,3 +1,20 @@
+## 04.08.2026
+
+```diff
+[features]
++ Search v2 with fuzzy subsequence matching, Dropdown/Input/KeyPicker value search, and groupbox/tabbox/sub-tab name matching
++ Ctrl+F now focuses the searchbar; Escape clears it and releases focus
++ Library.FuzzySearch, Library.SearchValues, WindowInfo.FuzzySearch, WindowInfo.SearchValues, WindowInfo.SearchKeybind, WindowInfo.DisableSearchKeybind
++ Built in console panel: LogService capture, severity filters, plain text filtering, copy, clear, and a header toggle button
++ Library.Console:Log/Info/Warn/Error, Show/Hide/Toggle/SetVisible, Clear/GetText/Copy
++ WindowInfo.Console, WindowInfo.ConsoleKeybind, WindowInfo.ConsoleCaptureOutput, WindowInfo.ConsoleMaxLines
++ Library.Scheme.YellowColor for console warnings
+
+[fixes]
++ Search queries are now matched as literal text instead of Lua patterns
++ Dropdown value filtering also treated its query as a Lua pattern
+```
+
 ## 11.07.2026
 
 ```diff

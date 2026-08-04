@@ -45,6 +45,19 @@ local Window = Library:CreateWindow({
 	-- Applies to the plain string form above (Default value = true)
 	-- Copying is disabled entirely if the executor has no clipboard function
 	CopyableFooter = true,
+
+	-- Search: fuzzy matching and value search are both on by default.
+	-- Ctrl+F focuses the searchbar, Escape clears it.
+	FuzzySearch = true,
+	SearchValues = true,
+	SearchKeybind = Enum.KeyCode.F,
+
+	-- Console: adds a header button and binds F9 to toggle the log panel.
+	-- ConsoleCaptureOutput picks up ordinary print/warn/errors via LogService.
+	Console = true,
+	ConsoleKeybind = Enum.KeyCode.F9,
+	ConsoleCaptureOutput = true,
+	ConsoleMaxLines = 500,
 })
 
 -- CALLBACK NOTE:
@@ -736,6 +749,48 @@ LeftGroupBox2:AddLabel(
 	"This label spans multiple lines! We're gonna run out of UI space...\nJust kidding! Scroll down!\n\n\nHello from below!",
 	true
 )
+
+-- Console demo. The panel is toggled with F9 or the header button; these buttons
+-- just push lines into it. Ordinary print/warn are picked up automatically because
+-- ConsoleCaptureOutput is on.
+local ConsoleGroupBox = Tabs.Main:AddLeftGroupbox("Console", "terminal")
+ConsoleGroupBox:AddButton({
+	Text = "Log output",
+	Func = function()
+		Library.Console:Log("a plain output line")
+	end,
+})
+ConsoleGroupBox:AddButton({
+	Text = "Log info",
+	Func = function()
+		Library.Console:Info("info line", os.time())
+	end,
+})
+ConsoleGroupBox:AddButton({
+	Text = "Log warning",
+	Func = function()
+		Library.Console:Warn("something looks off")
+	end,
+})
+ConsoleGroupBox:AddButton({
+	Text = "Log error",
+	Func = function()
+		Library.Console:Error("something broke")
+	end,
+})
+ConsoleGroupBox:AddButton({
+	Text = "Captured print/warn",
+	Func = function()
+		print("this reaches the console through LogService")
+		warn("so does this")
+	end,
+})
+ConsoleGroupBox:AddButton({
+	Text = "Toggle console",
+	Func = function()
+		Library.Console:Toggle()
+	end,
+})
 
 local TabBox = Tabs.Main:AddRightTabbox() -- Add Tabbox on right side
 

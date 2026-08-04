@@ -11,7 +11,7 @@ local repo = "https://raw.githubusercontent.com/joustingmatch/ObsidianUltra/main
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 ```
 
-Types for both features live in `Library.d.luau`; `Example.lua` has runnable usage.
+Types for these additions live in `Library.d.luau`; `Example.lua` has runnable usage.
 
 ## Sub tabs (tabs inside a tab)
 
@@ -127,6 +127,103 @@ The header was reworked and differs from upstream in ways that affect script aut
   `UDim2.fromScale(1, 1)`, and the box no longer resizes itself when tab info appears —
   the tab info grows to fill whatever the search box does not use. Pass your own
   `SearchbarSize` to override.
+
+## Search v2
+
+Header search is case insensitive and treats the query as plain text. Characters that
+have meaning in a Lua pattern, such as `(`, `%`, `-`, `+`, and `[`, are searched
+literally and cannot make the search error.
+
+When the direct substring test misses, fuzzy search can match the query as a subsequence:
+the same characters must appear in the same order, but other characters may sit between
+them. Fuzzy matching defaults to on, only runs for queries with at least two non-whitespace
+characters, and ignores whitespace in the query. Set `FuzzySearch = false` to keep only
+literal substring matching.
+
+Value search also defaults to on. In addition to an element's label, search considers:
+
+- every dropdown entry, plus its current selection (including multi selections); a
+  dropdown's `FormatDisplayValue` is used when it has one, so the displayed value is
+  searchable
+- an input's current value
+- a key picker's key name and mode, including a key picker attached to another element
+
+At most 100 dropdown entries are checked per element on each update, so a very large list
+does not stall the searchbar. Toggle and slider values, and colour picker values, are not
+searched.
+
+Container names participate too. Matching a groupbox name, a Tabbox tab name, or a nested
+sub tab name shows all of that container's normally visible contents. It does not bring
+back an element that the script explicitly hid.
+
+Press **Ctrl+F** while the window is open to focus the searchbar. The shortcut does not
+steal focus from another text box. While the searchbar is focused, **Escape** clears it
+and releases focus. The key half of the shortcut is configurable, but Ctrl is always
+required:
+
+```lua
+Library:CreateWindow({
+    FuzzySearch = true,
+    SearchValues = true,
+    SearchKeybind = Enum.KeyCode.F,
+    DisableSearchKeybind = false,
+})
+```
+
+These window options set `Library.FuzzySearch` and `Library.SearchValues`; both fields can
+also be changed directly. `DisableSearchKeybind = true` disables only the focus shortcut.
+`DisableSearch = true` removes search and makes both keyboard behaviours no-ops.
+`GlobalSearch` is separate: it still decides whether a query searches every top-level tab
+or only the active one.
+
+## Console
+
+An in-UI log panel, off by default. Enable it on the window:
+
+```lua
+Library:CreateWindow({
+    Console = true,
+    ConsoleKeybind = Enum.KeyCode.F9,
+    ConsoleCaptureOutput = true,
+    ConsoleMaxLines = 500,
+})
+```
+
+Enabling it adds a console button to the header, next to the search box, and binds
+`ConsoleKeybind` to toggle the panel. The keybind is ignored while any text box has focus.
+The panel is draggable by its title bar and resizable from its bottom right corner, and it
+hides with the main window rather than floating on its own.
+
+`ConsoleCaptureOutput` connects `LogService.MessageOut`, so ordinary `print` and `warn`
+calls, and runtime errors, show up without any further work. It is read only: `print` and
+`warn` are never replaced. Some executors restrict `LogService`; the connection is guarded
+and the panel still works for lines you log yourself. Log manually with:
+
+```lua
+Library.Console:Log("plain line")            -- defaults to "Output"
+Library.Console:Log("something", "Warning")  -- "Output" | "Info" | "Warning" | "Error"
+Library.Console:Info("takes", "varargs", 1)  -- same joining rules as print
+Library.Console:Warn("careful")
+Library.Console:Error("broke")
+```
+
+Lines are timestamped and coloured by severity: Output uses `FontColor`, Info uses
+`BlueColor`, Warning uses the new `Scheme.YellowColor`, and Error uses `RedColor`. Logged
+text is drawn with rich text disabled, so game output containing `<` or `>` cannot break
+the panel.
+
+The toolbar has a plain-text filter box, one toggle per severity, Copy, and Clear. Copy
+takes the currently filtered lines, and the button is omitted entirely when the executor
+exposes no clipboard function. `Library.Console:GetText()` returns the same text.
+
+The panel keeps at most `ConsoleMaxLines` lines, dropping the oldest first and destroying
+their labels. Appends are batched, so a game writing hundreds of messages a second does not
+stall the UI. The view sticks to the bottom while you are already at the bottom and stops
+following once you scroll up. While the panel is hidden, errors accumulate a count shown in
+the title bar, cleared when you open it.
+
+Other methods: `Show()`, `Hide()`, `Toggle()`, `SetVisible(bool)`, `Clear()`. `Library:Unload()`
+destroys the panel, drops the LogService connection, and clears the buffer.
 
 ## Restyled toggles and sliders
 

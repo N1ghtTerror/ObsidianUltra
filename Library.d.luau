@@ -12,10 +12,42 @@ export type Scheme = {
     Font: Font,
     RedColor: Color3,
     BlueColor: Color3,
+    YellowColor: Color3,
     DestructiveColor: Color3,
     DarkColor: Color3,
     WhiteColor: Color3,
     BackgroundImage: string,
+}
+
+--// Severity of a console line. Drives the colour it is drawn in.
+export type ConsoleSeverity = "Output" | "Info" | "Warning" | "Error"
+
+--// In-UI log panel. Captures LogService output and anything logged manually.
+export type Console = {
+    Enabled: boolean,
+    Visible: boolean,
+    MaxLines: number,
+    UnreadErrors: number,
+    Filters: { [ConsoleSeverity]: boolean },
+
+    Log: (self: Console, Text: any, Severity: ConsoleSeverity?) -> (),
+    Info: (self: Console, ...any) -> (),
+    Warn: (self: Console, ...any) -> (),
+    Error: (self: Console, ...any) -> (),
+
+    Show: (self: Console) -> (),
+    Hide: (self: Console) -> (),
+    Toggle: (self: Console) -> (),
+    SetVisible: (self: Console, Value: boolean) -> (),
+
+    Clear: (self: Console) -> (),
+    --// Currently filtered lines, one per line, as plain text
+    GetText: (self: Console) -> string,
+    --// False when the executor exposes no clipboard function
+    Copy: (self: Console) -> boolean,
+
+    Capture: (self: Console) -> (),
+    Destroy: (self: Console) -> (),
 }
 
 --// One piece of the window footer. Copyable segments are highlighted in blue and
@@ -682,6 +714,7 @@ export type DependencyGroupbox = BaseGroupbox & {
 }
 
 export type Groupbox = BaseGroupbox & {
+    Name: string,
     BoxHolder: Frame,
     Holder: Frame,
     Container: Frame,
@@ -695,6 +728,7 @@ export type Groupbox = BaseGroupbox & {
 }
 
 export type SubTab = BaseGroupbox & {
+    Name: string,
     ButtonHolder: TextButton,
     Container: Frame,
     Tab: Tab,
@@ -976,6 +1010,9 @@ export type Library = {
     SearchText: string,
     Searching: boolean,
     GlobalSearch: boolean,
+    FuzzySearch: boolean,
+    SearchValues: boolean,
+    Console: Console,
     LastSearchTab: Tab?,
     ActiveTab: Tab?,
     ActiveLoading: Loading?,
@@ -1029,6 +1066,7 @@ export type Library = {
 
     -- Methods
     UpdateDependencyBoxes: (self: Library) -> (),
+    MatchesSearch: (self: Library, ElementInfo: { [string]: any }, Search: string) -> boolean,
     UpdateSearch: (self: Library, SearchText: string) -> (),
     AddToRegistry: (self: Library, Instance: GuiObject, Properties: { [string]: string | () -> Color3 }) -> (),
     RemoveFromRegistry: (self: Library, Instance: GuiObject) -> (),
@@ -1155,8 +1193,16 @@ export type Library = {
             Center: boolean?,
             Resizable: boolean?,
             DisableSearch: boolean?,
+            DisableSearchKeybind: boolean?,
+            SearchKeybind: Enum.KeyCode?,
             SearchbarSize: UDim2?,
             GlobalSearch: boolean?,
+            FuzzySearch: boolean?,
+            SearchValues: boolean?,
+            Console: boolean?,
+            ConsoleKeybind: Enum.KeyCode?,
+            ConsoleCaptureOutput: boolean?,
+            ConsoleMaxLines: number?,
             CornerRadius: number?,
             NotifySide: "Left" | "Right"?,
             ShowCustomCursor: boolean?,
