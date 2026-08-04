@@ -143,8 +143,8 @@ literal substring matching.
 Value search also defaults to on. In addition to an element's label, search considers:
 
 - every dropdown entry, plus its current selection (including multi selections); a
-  dropdown's `FormatDisplayValue` is used when it has one, so the displayed value is
-  searchable
+  dropdown's `FormatListValue` is used when it has one, falling back to
+  `FormatDisplayValue`, so the value is searched as it is displayed
 - an input's current value
 - a key picker's key name and mode, including a key picker attached to another element
 
@@ -176,54 +176,56 @@ also be changed directly. `DisableSearchKeybind = true` disables only the focus 
 `GlobalSearch` is separate: it still decides whether a query searches every top-level tab
 or only the active one.
 
-## Console
+## Window shadow
 
-An in-UI log panel, off by default. Enable it on the window:
+The window is drawn with a soft drop shadow, on by default. It is built from stacked
+offset frames rather than a sliced image, so it needs no asset and cannot fail to load in
+an executor that blocks asset fetching.
 
 ```lua
 Library:CreateWindow({
-    Console = true,
-    ConsoleKeybind = Enum.KeyCode.F9,
-    ConsoleCaptureOutput = true,
-    ConsoleMaxLines = 500,
+    Shadow = true,
+    ShadowLayers = 4,        -- 1 to 10
+    ShadowSpread = 4,        -- pixels each layer grows past the one before it
+    ShadowTransparency = 0.72, -- transparency of the innermost layer
 })
 ```
 
-Enabling it adds a console button to the header, next to the search box, and binds
-`ConsoleKeybind` to toggle the panel. The keybind is ignored while any text box has focus.
-The panel is draggable by its title bar and resizable from its bottom right corner, and it
-hides with the main window rather than floating on its own.
+Layers are siblings of the frame they fall behind, not children, because Roblox draws
+children above their parent. They track the frame's position, size, anchor point, and
+visibility, and they carry their own `UIScale` so DPI scaling stays in step. Their corners
+are registered in `Library.Corners`, so they follow `Window:SetCornerRadius`.
 
-`ConsoleCaptureOutput` connects `LogService.MessageOut`, so ordinary `print` and `warn`
-calls, and runtime errors, show up without any further work. It is read only: `print` and
-`warn` are never replaced. Some executors restrict `LogService`; the connection is guarded
-and the panel still works for lines you log yourself. Log manually with:
+The same helper is public, for custom frames:
 
 ```lua
-Library.Console:Log("plain line")            -- defaults to "Output"
-Library.Console:Log("something", "Warning")  -- "Output" | "Info" | "Warning" | "Error"
-Library.Console:Info("takes", "varargs", 1)  -- same joining rules as print
-Library.Console:Warn("careful")
-Library.Console:Error("broke")
+local Shadow = Library:MakeShadow(SomeFrame, { Layers = 3, Spread = 5 })
+Shadow:SetVisible(false)
+Shadow:Destroy()
 ```
 
-Lines are timestamped and coloured by severity: Output uses `FontColor`, Info uses
-`BlueColor`, Warning uses the new `Scheme.YellowColor`, and Error uses `RedColor`. Logged
-text is drawn with rich text disabled, so game output containing `<` or `>` cannot break
-the panel.
+## Minimize
 
-The toolbar has a plain-text filter box, one toggle per severity, Copy, and Clear. Copy
-takes the currently filtered lines, and the button is omitted entirely when the executor
-exposes no clipboard function. `Library.Console:GetText()` returns the same text.
+The window can collapse to a small draggable pill showing the window icon, its title, and
+a restore chevron. A minimize button sits in the header, to the right of the search box.
+This is **not** the same as sidebar compacting (`Window:SetCompact`), which only narrows
+the sidebar and leaves the window at full size.
 
-The panel keeps at most `ConsoleMaxLines` lines, dropping the oldest first and destroying
-their labels. Appends are batched, so a game writing hundreds of messages a second does not
-stall the UI. The view sticks to the bottom while you are already at the bottom and stops
-following once you scroll up. While the panel is hidden, errors accumulate a count shown in
-the title bar, cleared when you open it.
+```lua
+Library:CreateWindow({
+    Minimizable = true,                     -- default true, removes the header button when false
+    MinimizeKeybind = Enum.KeyCode.RightBracket, -- optional, no default
+})
 
-Other methods: `Show()`, `Hide()`, `Toggle()`, `SetVisible(bool)`, `Clear()`. `Library:Unload()`
-destroys the panel, drops the LogService connection, and clears the buffer.
+Window:SetMinimized(true)
+Window:ToggleMinimized()
+Window:IsMinimized()
+```
+
+The pill opens at the window's last position rather than jumping to a corner, and restoring
+moves the window to wherever the pill was dragged. Clicking the pill restores; dragging it
+does not. The keybind is ignored while a text box has focus, and both the pill and the
+window stay hidden while the UI is toggled off, so minimizing never fights `Library:Toggle`.
 
 ## Restyled toggles and sliders
 

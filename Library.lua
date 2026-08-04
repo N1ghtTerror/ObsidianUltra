@@ -9,7 +9,6 @@ local UserInputService: UserInputService = cloneref(game:GetService("UserInputSe
 local TextService: TextService = cloneref(game:GetService("TextService"))
 local Teams: Teams = cloneref(game:GetService("Teams"))
 local TweenService: TweenService = cloneref(game:GetService("TweenService"))
-local LogService: LogService = cloneref(game:GetService("LogService"))
 
 local getgenv = getgenv or function()
     return shared
@@ -279,7 +278,6 @@ local Library = {
 
         RedColor = Color3.fromRGB(255, 50, 50),
         BlueColor = Color3.fromRGB(80, 155, 255),
-        YellowColor = Color3.fromRGB(255, 200, 60),
         DestructiveColor = Color3.fromRGB(220, 38, 38),
         DarkColor = Color3.new(0, 0, 0),
         WhiteColor = Color3.new(1, 1, 1),
@@ -383,10 +381,13 @@ local Templates = {
         SearchKeybind = Enum.KeyCode.F,
         DisableSearchKeybind = false,
 
-        Console = false,
-        ConsoleKeybind = Enum.KeyCode.F9,
-        ConsoleCaptureOutput = true,
-        ConsoleMaxLines = 500,
+        Shadow = true,
+        ShadowLayers = 4,
+        ShadowSpread = 4,
+        ShadowTransparency = 0.72,
+
+        Minimizable = true,
+        MinimizeKeybind = nil,
 
         CornerRadius = 4,
         NotifySide = "Right",
@@ -2020,6 +2021,105 @@ function Library:AddOutline(Frame: GuiObject)
         Parent = Frame,
     })
     return OutlineStroke, ShadowStroke
+end
+
+--// Soft drop shadow built from stacked offset frames rather than a sliced image, so it
+--// needs no asset and cannot fail to load. Roblox draws children above their parent, so
+--// the layers are siblings of the frame and track its position and size.
+function Library:MakeShadow(Frame: GuiObject, Info)
+    Info = Info or {}
+
+    local Layers = math.clamp(Info.Layers or 4, 1, 10)
+    local Spread = Info.Spread or 4
+    local StartTransparency = Info.Transparency or 0.72
+    local Radius = Info.CornerRadius or Library.CornerRadius
+
+    local Shadow = {
+        Layers = {},
+        Connections = {},
+        Destroyed = false,
+    }
+
+    for Index = 1, Layers do
+        --// Each layer sits further out and fades, approximating a blur
+        local Fade = StartTransparency + (1 - StartTransparency) * ((Index - 1) / Layers)
+
+        local Layer = New("Frame", {
+            BackgroundColor3 = "DarkColor",
+            BackgroundTransparency = math.clamp(Fade, 0, 1),
+            Name = "Shadow",
+            --// Below the frame it falls behind, but still above the backdrop
+            ZIndex = math.max(0, Frame.ZIndex - 1),
+            Parent = Frame.Parent,
+        })
+
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Radius + Index * Spread),
+                Parent = Layer,
+            })
+        )
+        --// The frame it tracks is DPI scaled, so the shadow has to scale with it
+        table.insert(
+            Library.Scales,
+            New("UIScale", {
+                Scale = Library.DPIScale,
+                Parent = Layer,
+            })
+        )
+
+        table.insert(Shadow.Layers, Layer)
+    end
+
+    function Shadow:Update()
+        if Shadow.Destroyed then
+            return
+        end
+
+        for Index, Layer in Shadow.Layers do
+            local Offset = Index * Spread
+
+            Layer.AnchorPoint = Frame.AnchorPoint
+            Layer.Position = Frame.Position - UDim2.fromOffset(Offset, Offset)
+            Layer.Size = Frame.Size + UDim2.fromOffset(Offset * 2, Offset * 2)
+            Layer.Visible = Frame.Visible
+        end
+    end
+
+    function Shadow:SetVisible(Value: boolean)
+        for _, Layer in Shadow.Layers do
+            Layer.Visible = Value and Frame.Visible
+        end
+    end
+
+    function Shadow:Destroy()
+        Shadow.Destroyed = true
+
+        for _, Connection in Shadow.Connections do
+            if Connection and Connection.Connected then
+                Connection:Disconnect()
+            end
+        end
+        table.clear(Shadow.Connections)
+
+        for _, Layer in Shadow.Layers do
+            Layer:Destroy()
+        end
+        table.clear(Shadow.Layers)
+    end
+
+    for _, Property in { "Position", "Size", "Visible", "AnchorPoint" } do
+        table.insert(
+            Shadow.Connections,
+            Library:GiveSignal(Frame:GetPropertyChangedSignal(Property):Connect(function()
+                Shadow:Update()
+            end))
+        )
+    end
+
+    Shadow:Update()
+    return Shadow
 end
 
 function Library:AddBlank(Frame: GuiObject, Size: UDim2)
@@ -9448,582 +9548,6 @@ function Library:Notify(...)
     return Data
 end
 
---// Console \\--
---// An in-UI log panel. Script authors get print/warn/error visibility without
---// hand rolling one, and a copy button so "send me your console" stops being a chore.
-local SEVERITY_ORDER = { "Output", "Info", "Warning", "Error" }
-local SEVERITY_COLORS = {
-    Output = "FontColor",
-    Info = "BlueColor",
-    Warning = "YellowColor",
-    Error = "RedColor",
-}
-local MESSAGE_TYPE_SEVERITY = {
-    [Enum.MessageType.MessageOutput] = "Output",
-    [Enum.MessageType.MessageInfo] = "Info",
-    [Enum.MessageType.MessageWarning] = "Warning",
-    [Enum.MessageType.MessageError] = "Error",
-}
-
-local Console = {
-    Enabled = false,
-    Visible = false,
-    MaxLines = 500,
-
-    --// { Text, Severity, Stamp, Label }
-    Lines = {},
-    Pending = {},
-    UnreadErrors = 0,
-
-    Filters = {
-        Output = true,
-        Info = true,
-        Warning = true,
-        Error = true,
-    },
-
-    --// Set while emitting so a captured message can never re-enter Log
-    Emitting = false,
-    Pinned = true,
-    Built = false,
-    Flushing = false,
-
-    Holder = nil,
-    List = nil,
-    SearchBox = nil,
-    TitleLabel = nil,
-    LogConnection = nil,
-}
-Library.Console = Console
-
-local function ConsoleStamp(): string
-    return os.date("%H:%M:%S")
-end
-
---// A line survives the filters when its severity is on and it matches the query
-local function ConsoleLineShown(Line): boolean
-    if not Console.Filters[Line.Severity] then
-        return false
-    end
-
-    local Query = Console.SearchBox and Console.SearchBox.Text:lower() or ""
-    if Query == "" then
-        return true
-    end
-
-    return Line.Text:lower():find(Query, 1, true) ~= nil
-end
-
-local function ConsoleUpdateTitle()
-    if not Console.TitleLabel then
-        return
-    end
-
-    local Suffix = ""
-    if Console.UnreadErrors > 0 and not Console.Visible then
-        Suffix = string.format("  (%d)", Console.UnreadErrors)
-    end
-
-    Console.TitleLabel.Text = string.format("Console  [%d]%s", #Console.Lines, Suffix)
-end
-
-local function ConsoleRefreshFilters()
-    for _, Line in Console.Lines do
-        if Line.Label then
-            Line.Label.Visible = ConsoleLineShown(Line)
-        end
-    end
-end
-
-local function ConsoleScrollToBottom()
-    local List = Console.List
-    if not List then
-        return
-    end
-
-    task.defer(function()
-        if Console.List ~= List or not List.Parent then
-            return
-        end
-
-        List.CanvasPosition = Vector2.new(0, math.max(0, List.AbsoluteCanvasSize.Y - List.AbsoluteWindowSize.Y))
-    end)
-end
-
-local function ConsoleCreateLabel(Line)
-    local Label = New("TextLabel", {
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        --// Game output is untrusted text, so never let it be parsed as markup
-        RichText = false,
-        Size = UDim2.new(1, 0, 0, 0),
-        Text = string.format("%s  %s", Line.Stamp, Line.Text),
-        TextColor3 = SEVERITY_COLORS[Line.Severity] or "FontColor",
-        TextSize = 13,
-        TextWrapped = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        Visible = ConsoleLineShown(Line),
-        Parent = Console.List,
-    })
-
-    Line.Label = Label
-    return Label
-end
-
---// Appends are batched: a game spewing output must not build one instance per message
-local function ConsoleFlush()
-    Console.Flushing = false
-
-    if not Console.Built or Library.Unloaded then
-        return
-    end
-
-    local Pending = Console.Pending
-    if #Pending == 0 then
-        return
-    end
-    Console.Pending = {}
-
-    for _, Line in Pending do
-        table.insert(Console.Lines, Line)
-        ConsoleCreateLabel(Line)
-    end
-
-    --// Evict from the front, destroying instances rather than hiding them
-    local Overflow = #Console.Lines - Console.MaxLines
-    for _ = 1, Overflow do
-        local Line = table.remove(Console.Lines, 1)
-        if Line and Line.Label then
-            Line.Label:Destroy()
-        end
-    end
-
-    ConsoleUpdateTitle()
-
-    if Console.Pinned then
-        ConsoleScrollToBottom()
-    end
-end
-
-local function ConsoleQueueFlush()
-    if Console.Flushing then
-        return
-    end
-
-    Console.Flushing = true
-    task.defer(ConsoleFlush)
-end
-
-function Console:Log(Text, Severity: string?)
-    if Library.Unloaded then
-        return
-    end
-
-    local Line = {
-        Text = tostring(Text),
-        Severity = SEVERITY_COLORS[Severity] and Severity or "Output",
-        Stamp = ConsoleStamp(),
-        Label = nil,
-    }
-
-    if Line.Severity == "Error" and not Console.Visible then
-        Console.UnreadErrors += 1
-    end
-
-    table.insert(Console.Pending, Line)
-
-    --// Bound the backlog even when the panel has never been built
-    while #Console.Pending > Console.MaxLines do
-        table.remove(Console.Pending, 1)
-    end
-
-    if Console.Built then
-        ConsoleQueueFlush()
-    end
-end
-
-local function ConsoleConcat(...): string
-    local Count = select("#", ...)
-    local Parts = table.create(Count)
-
-    for Index = 1, Count do
-        Parts[Index] = tostring((select(Index, ...)))
-    end
-
-    return table.concat(Parts, " ")
-end
-
-function Console:Info(...)
-    Console:Log(ConsoleConcat(...), "Info")
-end
-
-function Console:Warn(...)
-    Console:Log(ConsoleConcat(...), "Warning")
-end
-
-function Console:Error(...)
-    Console:Log(ConsoleConcat(...), "Error")
-end
-
-function Console:Clear()
-    for _, Line in Console.Lines do
-        if Line.Label then
-            Line.Label:Destroy()
-        end
-    end
-
-    table.clear(Console.Lines)
-    table.clear(Console.Pending)
-    Console.UnreadErrors = 0
-    ConsoleUpdateTitle()
-end
-
-function Console:GetText(): string
-    local Parts = {}
-
-    for _, Line in Console.Lines do
-        if ConsoleLineShown(Line) then
-            table.insert(Parts, string.format("[%s] [%s] %s", Line.Stamp, Line.Severity, Line.Text))
-        end
-    end
-
-    return table.concat(Parts, "\n")
-end
-
-function Console:Copy(): boolean
-    if not SetClipboard then
-        return false
-    end
-
-    return (pcall(SetClipboard, Console:GetText()))
-end
-
-function Console:SetVisible(Value: boolean)
-    Console.Visible = Value and true or false
-
-    if Console.Holder then
-        Console.Holder.Visible = Console.Visible
-    end
-
-    if Console.Visible then
-        Console.UnreadErrors = 0
-        ConsoleFlush()
-        ConsoleScrollToBottom()
-    end
-
-    ConsoleUpdateTitle()
-end
-
-function Console:Show()
-    Console:SetVisible(true)
-end
-
-function Console:Hide()
-    Console:SetVisible(false)
-end
-
-function Console:Toggle()
-    Console:SetVisible(not Console.Visible)
-end
-
-function Console:Destroy()
-    if Console.LogConnection then
-        Console.LogConnection:Disconnect()
-        Console.LogConnection = nil
-    end
-
-    if Console.Holder then
-        Console.Holder:Destroy()
-    end
-
-    table.clear(Console.Lines)
-    table.clear(Console.Pending)
-
-    Console.Holder = nil
-    Console.List = nil
-    Console.SearchBox = nil
-    Console.TitleLabel = nil
-    Console.Built = false
-    Console.Enabled = false
-    Console.Visible = false
-    Console.UnreadErrors = 0
-end
-
-function Console:Capture()
-    if Console.LogConnection then
-        return
-    end
-
-    --// Restricted in some executor environments, so failure here is not fatal
-    pcall(function()
-        Console.LogConnection = Library:GiveSignal(
-            LogService.MessageOut:Connect(function(Message: string, MessageType: Enum.MessageType)
-                if Console.Emitting then
-                    return
-                end
-
-                Console.Emitting = true
-                Console:Log(Message, MESSAGE_TYPE_SEVERITY[MessageType] or "Output")
-                Console.Emitting = false
-            end)
-        )
-    end)
-end
-
-function Console:Build(WindowInfo)
-    if Console.Built then
-        return
-    end
-    Console.Built = true
-
-    local Radius = Library.CornerRadius
-
-    local Holder = New("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = "BackgroundColor",
-        Position = UDim2.fromScale(0.5, 0.5),
-        --// Matches Library.MinSize so the first resize drag does not snap
-        Size = UDim2.fromOffset(560, 360),
-        Visible = false,
-        ZIndex = 20,
-        Parent = ScreenGui,
-    })
-    Console.Holder = Holder
-
-    table.insert(
-        Library.Corners,
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Radius),
-            Parent = Holder,
-        })
-    )
-    New("UIStroke", {
-        Color = "OutlineColor",
-        Parent = Holder,
-    })
-
-    --// Title bar \\--
-    local TitleBar = New("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 28),
-        Parent = Holder,
-    })
-
-    local TitleLabel = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(10, 0),
-        Size = UDim2.new(1, -44, 1, 0),
-        Text = "Console  [0]",
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = TitleBar,
-    })
-    Console.TitleLabel = TitleLabel
-
-    local CloseButton = New("TextButton", {
-        AnchorPoint = Vector2.new(1, 0.5),
-        BackgroundTransparency = 1,
-        Position = UDim2.new(1, -8, 0.5, 0),
-        Size = UDim2.fromOffset(20, 20),
-        Text = "X",
-        TextSize = 14,
-        TextTransparency = 0.4,
-        Parent = TitleBar,
-    })
-    CloseButton.MouseButton1Click:Connect(function()
-        Console:Hide()
-    end)
-
-    Library:MakeLine(Holder, {
-        Position = UDim2.fromOffset(0, 28),
-        Size = UDim2.new(1, 0, 0, 1),
-    })
-
-    --// Toolbar \\--
-    local Toolbar = New("Frame", {
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(0, 29),
-        Size = UDim2.new(1, 0, 0, 28),
-        Parent = Holder,
-    })
-    New("UIListLayout", {
-        FillDirection = Enum.FillDirection.Horizontal,
-        Padding = UDim.new(0, 6),
-        VerticalAlignment = Enum.VerticalAlignment.Center,
-        Parent = Toolbar,
-    })
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 8),
-        PaddingRight = UDim.new(0, 8),
-        Parent = Toolbar,
-    })
-
-    local SearchBox = New("TextBox", {
-        BackgroundColor3 = "MainColor",
-        LayoutOrder = 0,
-        PlaceholderText = "Filter...",
-        Size = UDim2.new(0, 150, 0, 20),
-        Text = "",
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = Toolbar,
-    })
-    Console.SearchBox = SearchBox
-    table.insert(
-        Library.PillCorners,
-        New("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = SearchBox,
-        })
-    )
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 8),
-        PaddingRight = UDim.new(0, 8),
-        Parent = SearchBox,
-    })
-    SearchBox:GetPropertyChangedSignal("Text"):Connect(ConsoleRefreshFilters)
-
-    --// Severity pills \\--
-    for Index, Severity in SEVERITY_ORDER do
-        local Pill = New("TextButton", {
-            BackgroundColor3 = "MainColor",
-            LayoutOrder = Index,
-            Size = UDim2.fromOffset(58, 20),
-            Text = Severity,
-            TextColor3 = SEVERITY_COLORS[Severity],
-            TextSize = 12,
-            Parent = Toolbar,
-        })
-        table.insert(
-            Library.PillCorners,
-            New("UICorner", {
-                CornerRadius = UDim.new(1, 0),
-                Parent = Pill,
-            })
-        )
-
-        local function Sync()
-            Pill.TextTransparency = Console.Filters[Severity] and 0 or 0.65
-            Pill.BackgroundTransparency = Console.Filters[Severity] and 0 or 0.5
-        end
-        Sync()
-
-        Pill.MouseButton1Click:Connect(function()
-            Console.Filters[Severity] = not Console.Filters[Severity]
-            Sync()
-            ConsoleRefreshFilters()
-        end)
-    end
-
-    --// Copy / Clear \\--
-    if SetClipboard then
-        local CopyButton = New("TextButton", {
-            BackgroundColor3 = "MainColor",
-            LayoutOrder = 90,
-            Size = UDim2.fromOffset(52, 20),
-            Text = "Copy",
-            TextSize = 12,
-            Parent = Toolbar,
-        })
-        table.insert(
-            Library.PillCorners,
-            New("UICorner", {
-                CornerRadius = UDim.new(1, 0),
-                Parent = CopyButton,
-            })
-        )
-
-        local ResetThread
-        CopyButton.MouseButton1Click:Connect(function()
-            if not Console:Copy() then
-                return
-            end
-
-            CopyButton.Text = "Copied"
-            if ResetThread then
-                task.cancel(ResetThread)
-            end
-
-            ResetThread = task.delay(1.5, function()
-                ResetThread = nil
-                CopyButton.Text = "Copy"
-            end)
-        end)
-    end
-
-    local ClearButton = New("TextButton", {
-        BackgroundColor3 = "MainColor",
-        LayoutOrder = 91,
-        Size = UDim2.fromOffset(52, 20),
-        Text = "Clear",
-        TextColor3 = "RedColor",
-        TextSize = 12,
-        Parent = Toolbar,
-    })
-    table.insert(
-        Library.PillCorners,
-        New("UICorner", {
-            CornerRadius = UDim.new(1, 0),
-            Parent = ClearButton,
-        })
-    )
-    ClearButton.MouseButton1Click:Connect(function()
-        Console:Clear()
-    end)
-
-    --// Body \\--
-    local List = New("ScrollingFrame", {
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        CanvasSize = UDim2.fromScale(0, 0),
-        Position = UDim2.fromOffset(0, 58),
-        ScrollBarThickness = 3,
-        ScrollBarImageColor3 = "OutlineColor",
-        Size = UDim2.new(1, 0, 1, -58),
-        Parent = Holder,
-    })
-    Console.List = List
-    New("UIListLayout", {
-        Padding = UDim.new(0, 2),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = List,
-    })
-    New("UIPadding", {
-        PaddingBottom = UDim.new(0, 6),
-        PaddingLeft = UDim.new(0, 8),
-        PaddingRight = UDim.new(0, 8),
-        PaddingTop = UDim.new(0, 6),
-        Parent = List,
-    })
-
-    --// Stick to the bottom only while the user is already there
-    List:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-        local Max = math.max(0, List.AbsoluteCanvasSize.Y - List.AbsoluteWindowSize.Y)
-        Console.Pinned = (Max - List.CanvasPosition.Y) <= 24
-    end)
-
-    Library:MakeDraggable(Holder, TitleBar, true)
-
-    if not WindowInfo or WindowInfo.Resizable then
-        --// Grip in the bottom right corner, same idea as the main window
-        local ResizeButton = New("TextButton", {
-            AnchorPoint = Vector2.new(1, 1),
-            BackgroundTransparency = 1,
-            Position = UDim2.fromScale(1, 1),
-            Size = UDim2.fromOffset(14, 14),
-            Text = "",
-            ZIndex = 21,
-            Parent = Holder,
-        })
-
-        Library:MakeResizable(Holder, ResizeButton)
-    end
-
-    ConsoleFlush()
-    ConsoleUpdateTitle()
-end
-
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
     local ViewportSize: Vector2 = workspace.CurrentCamera.ViewportSize
@@ -10071,16 +9595,6 @@ function Library:CreateWindow(WindowInfo)
     Library.FuzzySearch = WindowInfo.FuzzySearch
     Library.SearchValues = WindowInfo.SearchValues
 
-    if WindowInfo.Console then
-        Console.Enabled = true
-        Console.MaxLines = math.max(1, tonumber(WindowInfo.ConsoleMaxLines) or 500)
-        Console:Build(WindowInfo)
-
-        if WindowInfo.ConsoleCaptureOutput then
-            Console:Capture()
-        end
-    end
-
     Library.Animations = WindowInfo.Animations
     Library.TabTransitionInfo = TweenInfo.new(
         math.max(0, WindowInfo.TabTransitionTime or 0.22),
@@ -10108,10 +9622,14 @@ function Library:CreateWindow(WindowInfo)
     local FooterSegments = {}
     local BuildFooter
     local TopBar
+    local WindowShadow
+    local MiniFrame
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
     local IsCompact = WindowInfo.SidebarCompacted
     local LastExpandedWidth = InitialLeftWidth
+    local Minimized = false
+    local ApplyWindowVisibility
 
     do
         Library.KeybindFrame, Library.KeybindContainer = Library:AddDraggableMenu("Keybinds")
@@ -10146,6 +9664,16 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(MainFrame)
+
+        if WindowInfo.Shadow then
+            WindowShadow = Library:MakeShadow(MainFrame, {
+                Layers = WindowInfo.ShadowLayers,
+                Spread = WindowInfo.ShadowSpread,
+                Transparency = WindowInfo.ShadowTransparency,
+                CornerRadius = WindowInfo.CornerRadius,
+            })
+        end
+
         Library:MakeLine(MainFrame, {
             Position = UDim2.fromOffset(0, 48),
             Size = UDim2.new(1, 0, 0, 1),
@@ -10400,62 +9928,173 @@ function Library:CreateWindow(WindowInfo)
             end))
         end
 
-        --// Console toggle: header button plus a keybind \\--
-        if WindowInfo.Console then
-            local ConsoleIcon = Library:GetIcon("terminal") or Library:GetIcon("code")
+        --// Minimize: collapses the window down to a draggable pill \\--
+        if WindowInfo.Minimizable then
+            local MinimizeIcon = Library:GetIcon("minus")
 
-            local ConsoleButton = New("TextButton", {
+            local MinimizeButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
-                LayoutOrder = 5,
+                BackgroundTransparency = 1,
+                LayoutOrder = 6,
                 Size = UDim2.fromOffset(24, 24),
-                Text = ConsoleIcon and "" or ">_",
-                TextSize = 12,
+                Text = MinimizeIcon and "" or "—",
+                TextSize = 14,
+                TextTransparency = 0.35,
                 Parent = TopBar,
             })
             table.insert(
                 Library.Corners,
                 New("UICorner", {
                     CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                    Parent = ConsoleButton,
+                    Parent = MinimizeButton,
                 })
             )
 
-            if ConsoleIcon then
+            if MinimizeIcon then
                 New("ImageLabel", {
                     AnchorPoint = Vector2.new(0.5, 0.5),
-                    Image = ConsoleIcon.Url,
+                    Image = MinimizeIcon.Url,
                     ImageColor3 = "FontColor",
-                    ImageRectOffset = ConsoleIcon.ImageRectOffset,
-                    ImageRectSize = ConsoleIcon.ImageRectSize,
+                    ImageRectOffset = MinimizeIcon.ImageRectOffset,
+                    ImageRectSize = MinimizeIcon.ImageRectSize,
+                    ImageTransparency = 0.35,
                     Position = UDim2.fromScale(0.5, 0.5),
                     ScaleType = Enum.ScaleType.Fit,
                     Size = UDim2.fromOffset(16, 16),
-                    Parent = ConsoleButton,
+                    Parent = MinimizeButton,
                 })
             end
 
-            Library:AddTooltip("Toggle the console", nil, ConsoleButton)
-            ConsoleButton.MouseButton1Click:Connect(function()
-                Console:Toggle()
+            Library:AddTooltip("Minimize", nil, MinimizeButton)
+            MinimizeButton.MouseEnter:Connect(function()
+                TweenService:Create(MinimizeButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+            end)
+            MinimizeButton.MouseLeave:Connect(function()
+                TweenService:Create(MinimizeButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+            end)
+            MinimizeButton.MouseButton1Click:Connect(function()
+                Library.Window:SetMinimized(true)
             end)
 
-            Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject, Processed: boolean)
-                if Processed or Library.Unloaded then
-                    return
-                end
-                if Input.UserInputType ~= Enum.UserInputType.Keyboard then
-                    return
-                end
-                if Input.KeyCode ~= WindowInfo.ConsoleKeybind then
-                    return
-                end
-                --// Never fire while the user is typing somewhere
-                if UserInputService:GetFocusedTextBox() then
-                    return
-                end
+            --// The pill itself. Sized to its contents so long titles still fit.
+            MiniFrame = New("TextButton", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+                end,
+                Name = "Mini",
+                Position = WindowInfo.Position,
+                Size = UDim2.fromOffset(0, 34),
+                Text = "",
+                Visible = false,
+                Parent = ScreenGui,
+            })
+            table.insert(
+                Library.PillCorners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = MiniFrame,
+                })
+            )
+            table.insert(
+                Library.Scales,
+                New("UIScale", {
+                    Parent = MiniFrame,
+                })
+            )
+            Library:AddOutline(MiniFrame)
 
-                Console:Toggle()
-            end))
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                Padding = UDim.new(0, 8),
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Parent = MiniFrame,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12),
+                Parent = MiniFrame,
+            })
+
+            --// Resolved the same way the header icon is
+            local WindowIconData = WindowInfo.Icon and Library:GetCustomIcon(WindowInfo.Icon) or nil
+            if WindowIconData then
+                New("ImageLabel", {
+                    Image = WindowIconData.Url,
+                    ImageRectOffset = WindowIconData.ImageRectOffset,
+                    ImageRectSize = WindowIconData.ImageRectSize,
+                    LayoutOrder = 0,
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromOffset(18, 18),
+                    Parent = MiniFrame,
+                })
+            end
+
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundTransparency = 1,
+                LayoutOrder = 1,
+                Size = UDim2.fromOffset(0, 18),
+                Text = `<b>{WindowInfo.Title}</b>`,
+                TextSize = 14,
+                Parent = MiniFrame,
+            })
+
+            local RestoreIcon = Library:GetIcon("chevron-up")
+            local RestoreButton = New("TextButton", {
+                BackgroundTransparency = 1,
+                LayoutOrder = 2,
+                Size = UDim2.fromOffset(18, 18),
+                Text = RestoreIcon and "" or "^",
+                TextSize = 14,
+                TextTransparency = 0.35,
+                Parent = MiniFrame,
+            })
+
+            if RestoreIcon then
+                New("ImageLabel", {
+                    Image = RestoreIcon.Url,
+                    ImageColor3 = "FontColor",
+                    ImageRectOffset = RestoreIcon.ImageRectOffset,
+                    ImageRectSize = RestoreIcon.ImageRectSize,
+                    ImageTransparency = 0.35,
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromScale(1, 1),
+                    Parent = RestoreButton,
+                })
+            end
+
+            Library:AddTooltip("Restore", nil, RestoreButton)
+
+            local function Restore()
+                Library.Window:SetMinimized(false)
+            end
+            RestoreButton.MouseButton1Click:Connect(Restore)
+
+            --// Dragging the pill must not also count as a click to restore
+            local MiniDragged = false
+            MiniFrame.MouseButton1Down:Connect(function()
+                MiniDragged = false
+            end)
+            MiniFrame:GetPropertyChangedSignal("Position"):Connect(function()
+                MiniDragged = true
+            end)
+            MiniFrame.MouseButton1Click:Connect(function()
+                if not MiniDragged then
+                    Restore()
+                end
+            end)
+
+            Library:MakeDraggable(MiniFrame, MiniFrame, true)
+
+            if WindowInfo.Shadow then
+                Library:MakeShadow(MiniFrame, {
+                    Layers = WindowInfo.ShadowLayers,
+                    Spread = WindowInfo.ShadowSpread,
+                    Transparency = WindowInfo.ShadowTransparency,
+                    CornerRadius = 17,
+                })
+            end
         end
 
         if MoveIcon then
@@ -10917,6 +10556,47 @@ function Library:CreateWindow(WindowInfo)
 
     function Window:IsSidebarCompacted()
         return IsCompact
+    end
+
+    --// Minimized is the whole window collapsing to a pill, which is a different thing
+    --// from SetCompact below: that only narrows the sidebar.
+    function Window:IsMinimized()
+        return Minimized
+    end
+
+    function Window:SetMinimized(Value: boolean?)
+        if not MiniFrame then
+            return
+        end
+
+        if Value == nil then
+            Value = not Minimized
+        end
+        Value = Value and true or false
+
+        if Value == Minimized then
+            return
+        end
+        Minimized = Value
+
+        if Minimized then
+            --// Open the pill where the window was, so it does not jump across the screen
+            MiniFrame.Position = MainFrame.Position
+            MiniFrame.AnchorPoint = MainFrame.AnchorPoint
+        else
+            MainFrame.Position = MiniFrame.Position
+            MainFrame.AnchorPoint = MiniFrame.AnchorPoint
+        end
+
+        ApplyWindowVisibility()
+
+        if WindowShadow then
+            WindowShadow:SetVisible(not Minimized)
+        end
+    end
+
+    function Window:ToggleMinimized()
+        Window:SetMinimized(not Minimized)
     end
 
     function Window:SetCompact(State)
@@ -13542,6 +13222,16 @@ function Library:CreateWindow(WindowInfo)
         end
     end
 
+    --// Which of the two shells is on screen depends on both the toggle and whether
+    --// the window is currently minimized to its pill
+    function ApplyWindowVisibility()
+        MainFrame.Visible = Library.Toggled and not Minimized
+
+        if MiniFrame then
+            MiniFrame.Visible = Library.Toggled and Minimized
+        end
+    end
+
     function Window:Toggle(Value: boolean?)
         if Fading then
             return
@@ -13567,11 +13257,11 @@ function Library:CreateWindow(WindowInfo)
             local FadeTime = Library.WindowAnimationInfo.Time
             Fading = true
 
-            if Library.Toggled then
+            if Library.Toggled and not Minimized then
                 MainFrame.Visible = true
             end
 
-            if Library.Toggled then 
+            if Library.Toggled then
 				FadeInstance(MainFrame, { "BackgroundTransparency" })
 				task.wait(FadeTime / 2)
 			else
@@ -13598,11 +13288,11 @@ function Library:CreateWindow(WindowInfo)
             end
 
             task.delay(FadeTime, function()
-                MainFrame.Visible = Library.Toggled
+                ApplyWindowVisibility()
                 Fading = false
             end)
         else
-            MainFrame.Visible = Library.Toggled
+            ApplyWindowVisibility()
         end
 
         if WindowInfo.UnlockMouseWhileOpen then
@@ -13642,14 +13332,27 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Library:Toggle(Value: boolean?)
-        local Result = Window:Toggle(Value)
+        return Window:Toggle(Value)
+    end
 
-        --// The console rides along with the main window rather than floating alone
-        if Console.Enabled and not Library.Toggled and Console.Visible then
-            Console:Hide()
-        end
+    if WindowInfo.Minimizable and WindowInfo.MinimizeKeybind then
+        Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject, Processed: boolean)
+            if Processed or Library.Unloaded or not Library.Toggled then
+                return
+            end
+            if Input.UserInputType ~= Enum.UserInputType.Keyboard then
+                return
+            end
+            if Input.KeyCode ~= WindowInfo.MinimizeKeybind then
+                return
+            end
+            --// Never fire while the user is typing somewhere
+            if UserInputService:GetFocusedTextBox() then
+                return
+            end
 
-        return Result
+            Window:ToggleMinimized()
+        end))
     end
 
     if WindowInfo.EnableSidebarResize then
@@ -14518,11 +14221,6 @@ Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 function Library:Unload()
     Library.Unloaded = true
-
-    --// Tear the console down before the signals go, it owns one of them
-    if Library.Console then
-        Library.Console:Destroy()
-    end
 
     --// Disconnect connections
     for Index = #Library.Signals, 1, -1 do

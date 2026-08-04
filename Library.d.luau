@@ -12,42 +12,21 @@ export type Scheme = {
     Font: Font,
     RedColor: Color3,
     BlueColor: Color3,
-    YellowColor: Color3,
     DestructiveColor: Color3,
     DarkColor: Color3,
     WhiteColor: Color3,
     BackgroundImage: string,
 }
 
---// Severity of a console line. Drives the colour it is drawn in.
-export type ConsoleSeverity = "Output" | "Info" | "Warning" | "Error"
+--// Stacked offset frames sitting behind a GuiObject, used as a soft drop shadow.
+export type Shadow = {
+    Layers: { Frame },
+    Destroyed: boolean,
 
---// In-UI log panel. Captures LogService output and anything logged manually.
-export type Console = {
-    Enabled: boolean,
-    Visible: boolean,
-    MaxLines: number,
-    UnreadErrors: number,
-    Filters: { [ConsoleSeverity]: boolean },
-
-    Log: (self: Console, Text: any, Severity: ConsoleSeverity?) -> (),
-    Info: (self: Console, ...any) -> (),
-    Warn: (self: Console, ...any) -> (),
-    Error: (self: Console, ...any) -> (),
-
-    Show: (self: Console) -> (),
-    Hide: (self: Console) -> (),
-    Toggle: (self: Console) -> (),
-    SetVisible: (self: Console, Value: boolean) -> (),
-
-    Clear: (self: Console) -> (),
-    --// Currently filtered lines, one per line, as plain text
-    GetText: (self: Console) -> string,
-    --// False when the executor exposes no clipboard function
-    Copy: (self: Console) -> boolean,
-
-    Capture: (self: Console) -> (),
-    Destroy: (self: Console) -> (),
+    --// Re-reads the tracked frame; connected to its Position/Size/Visible already
+    Update: (self: Shadow) -> (),
+    SetVisible: (self: Shadow, Value: boolean) -> (),
+    Destroy: (self: Shadow) -> (),
 }
 
 --// One piece of the window footer. Copyable segments are highlighted in blue and
@@ -952,6 +931,10 @@ export type Dialog = {
 
 
 export type Window = {
+    --// Whole window collapsed to a pill. Distinct from the sidebar compacting below.
+    IsMinimized: (self: Window) -> boolean,
+    SetMinimized: (self: Window, Value: boolean?) -> (),
+    ToggleMinimized: (self: Window) -> (),
     IsSidebarCompacted: (self: Window) -> boolean,
     GetSidebarWidth: (self: Window) -> number,
     SetSidebarWidth: (self: Window, Width: number) -> (),
@@ -1012,7 +995,6 @@ export type Library = {
     GlobalSearch: boolean,
     FuzzySearch: boolean,
     SearchValues: boolean,
-    Console: Console,
     LastSearchTab: Tab?,
     ActiveTab: Tab?,
     ActiveLoading: Loading?,
@@ -1099,6 +1081,16 @@ export type Library = {
     MakeCover: (self: Library, Holder: GuiObject, Place: string) -> Frame,
     MakeLine: (self: Library, Frame: GuiObject, Info: { AnchorPoint: Vector2?, Position: UDim2, Size: UDim2 }) -> Frame,
     AddOutline: (self: Library, Frame: GuiObject) -> Frame,
+    MakeShadow: (
+        self: Library,
+        Frame: GuiObject,
+        Info: {
+            Layers: number?,
+            Spread: number?,
+            Transparency: number?,
+            CornerRadius: number?,
+        }?
+    ) -> Shadow,
     AddBlank: (self: Library, Frame: GuiObject, Size: UDim2) -> (),
     MakeOutline: (self: Library, Frame: GuiObject, Corner: number?, ZIndex: number?) -> Frame,
     AddDraggableLabel: (
@@ -1199,10 +1191,12 @@ export type Library = {
             GlobalSearch: boolean?,
             FuzzySearch: boolean?,
             SearchValues: boolean?,
-            Console: boolean?,
-            ConsoleKeybind: Enum.KeyCode?,
-            ConsoleCaptureOutput: boolean?,
-            ConsoleMaxLines: number?,
+            Shadow: boolean?,
+            ShadowLayers: number?,
+            ShadowSpread: number?,
+            ShadowTransparency: number?,
+            Minimizable: boolean?,
+            MinimizeKeybind: Enum.KeyCode?,
             CornerRadius: number?,
             NotifySide: "Left" | "Right"?,
             ShowCustomCursor: boolean?,
