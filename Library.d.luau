@@ -12,10 +12,21 @@ export type Scheme = {
     Font: Font,
     RedColor: Color3,
     BlueColor: Color3,
+    ShadowColor: Color3,
     DestructiveColor: Color3,
     DarkColor: Color3,
     WhiteColor: Color3,
     BackgroundImage: string,
+}
+
+--// A line of text on the minimized card.
+export type MinimizedLabel = {
+    Label: TextLabel,
+    Type: "MinimizedLabel",
+
+    SetText: (self: MinimizedLabel, Value: string?) -> (),
+    SetVisible: (self: MinimizedLabel, Value: boolean) -> (),
+    Destroy: (self: MinimizedLabel) -> (),
 }
 
 --// Stacked offset frames sitting behind a GuiObject, used as a soft drop shadow.
@@ -935,6 +946,9 @@ export type Window = {
     IsMinimized: (self: Window) -> boolean,
     SetMinimized: (self: Window, Value: boolean?) -> (),
     ToggleMinimized: (self: Window) -> (),
+    SetMinimizedSubtitle: (self: Window, Text: string?) -> (),
+    AddMinimizedLabel: (self: Window, Text: string?) -> MinimizedLabel?,
+    ClearMinimizedLabels: (self: Window) -> (),
     IsSidebarCompacted: (self: Window) -> boolean,
     GetSidebarWidth: (self: Window) -> number,
     SetSidebarWidth: (self: Window, Width: number) -> (),
@@ -1089,6 +1103,8 @@ export type Library = {
             Spread: number?,
             Transparency: number?,
             CornerRadius: number?,
+            --// A scheme key such as "ShadowColor" stays themeable; a Color3 is fixed
+            Color: (string | Color3)?,
         }?
     ) -> Shadow,
     AddBlank: (self: Library, Frame: GuiObject, Size: UDim2) -> (),
@@ -1197,6 +1213,8 @@ export type Library = {
             ShadowTransparency: number?,
             Minimizable: boolean?,
             MinimizeKeybind: Enum.KeyCode?,
+            MinimizedWidth: number?,
+            MinimizedSubtitle: string?,
             CornerRadius: number?,
             NotifySide: "Left" | "Right"?,
             ShowCustomCursor: boolean?,

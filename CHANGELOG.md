@@ -7,7 +7,10 @@
 + Library.FuzzySearch, Library.SearchValues, WindowInfo.FuzzySearch, WindowInfo.SearchValues, WindowInfo.SearchKeybind, WindowInfo.DisableSearchKeybind
 + Soft drop shadow behind the window, built from stacked frames so it needs no asset
 + Library:MakeShadow for custom frames, plus WindowInfo.Shadow, ShadowLayers, ShadowSpread, ShadowTransparency
-+ Minimize the window to a draggable pill: header button, Window:SetMinimized/ToggleMinimized/IsMinimized, WindowInfo.Minimizable, WindowInfo.MinimizeKeybind
++ Library.Scheme.ShadowColor, editable in the theme manager as "Shadow color" and saved with custom themes
++ Minimize the window to a card with title, subtitle, labels and footer; button sits beside the move icon
++ Window:SetMinimized/ToggleMinimized/IsMinimized, SetMinimizedSubtitle, AddMinimizedLabel, ClearMinimizedLabels
++ WindowInfo.Minimizable, MinimizeKeybind, MinimizedWidth, MinimizedSubtitle
 
 [fixes]
 + Search queries are now matched as literal text instead of Lua patterns

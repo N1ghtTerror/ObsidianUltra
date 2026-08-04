@@ -59,11 +59,17 @@ local Window = Library:CreateWindow({
 	ShadowSpread = 4,
 	ShadowTransparency = 0.72,
 
-	-- Adds a minimize button to the header that collapses the window to a pill.
+	-- Adds a minimize button next to the move icon that collapses the window to a
+	-- small card showing the title, subtitle, any labels, and the footer.
 	-- Not the same as sidebar compacting. MinimizeKeybind is optional.
 	Minimizable = true,
 	MinimizeKeybind = Enum.KeyCode.RightBracket,
+	MinimizedWidth = 300,
+	MinimizedSubtitle = "idle",
 })
+
+-- Labels shown on the minimized card, so status stays visible while collapsed
+local MinimizedStatus = Window:AddMinimizedLabel("Nothing running")
 
 -- CALLBACK NOTE:
 -- Passing in callback functions via the initial element parameters (i.e. Callback = function(Value)...) works
@@ -754,6 +760,23 @@ LeftGroupBox2:AddLabel(
 	"This label spans multiple lines! We're gonna run out of UI space...\nJust kidding! Scroll down!\n\n\nHello from below!",
 	true
 )
+
+-- Minimize demo: drives the card's subtitle and its status label
+local MinimizeGroupBox = Tabs.Main:AddLeftGroupbox("Minimize", "minus")
+MinimizeGroupBox:AddButton({
+	Text = "Minimize the window",
+	Func = function()
+		Window:SetMinimized(true)
+	end,
+})
+MinimizeGroupBox:AddToggle("MinimizedBusy", {
+	Text = "Pretend something is running",
+	Default = false,
+	Callback = function(Value)
+		Window:SetMinimizedSubtitle(Value and "1 task running" or "idle")
+		MinimizedStatus:SetText(Value and "Farming: 1 running" or "Nothing running")
+	end,
+})
 
 local TabBox = Tabs.Main:AddRightTabbox() -- Add Tabbox on right side
 

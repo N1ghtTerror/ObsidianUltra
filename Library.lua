@@ -278,6 +278,7 @@ local Library = {
 
         RedColor = Color3.fromRGB(255, 50, 50),
         BlueColor = Color3.fromRGB(80, 155, 255),
+        ShadowColor = Color3.new(0, 0, 0),
         DestructiveColor = Color3.fromRGB(220, 38, 38),
         DarkColor = Color3.new(0, 0, 0),
         WhiteColor = Color3.new(1, 1, 1),
@@ -388,6 +389,8 @@ local Templates = {
 
         Minimizable = true,
         MinimizeKeybind = nil,
+        MinimizedWidth = 300,
+        MinimizedSubtitle = "",
 
         CornerRadius = 4,
         NotifySide = "Right",
@@ -2033,6 +2036,8 @@ function Library:MakeShadow(Frame: GuiObject, Info)
     local Spread = Info.Spread or 4
     local StartTransparency = Info.Transparency or 0.72
     local Radius = Info.CornerRadius or Library.CornerRadius
+    --// A scheme key keeps the glow themeable; a Color3 pins it for one frame
+    local Color = Info.Color or "ShadowColor"
 
     local Shadow = {
         Layers = {},
@@ -2045,7 +2050,7 @@ function Library:MakeShadow(Frame: GuiObject, Info)
         local Fade = StartTransparency + (1 - StartTransparency) * ((Index - 1) / Layers)
 
         local Layer = New("Frame", {
-            BackgroundColor3 = "DarkColor",
+            BackgroundColor3 = Color,
             BackgroundTransparency = math.clamp(Fade, 0, 1),
             Name = "Shadow",
             --// Below the frame it falls behind, but still above the backdrop
@@ -9621,15 +9626,24 @@ function Library:CreateWindow(WindowInfo)
     local BottomBackground
     local FooterSegments = {}
     local BuildFooter
+    local BuildMiniFooter
     local TopBar
     local WindowShadow
     local MiniFrame
+    local MiniSubtitle
+    local MiniBody
+    local MiniFooterHolder
+    local MiniFooter
+    local MiniLabels = {}
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
     local IsCompact = WindowInfo.SidebarCompacted
     local LastExpandedWidth = InitialLeftWidth
     local Minimized = false
     local ApplyWindowVisibility
+    --// Extra room reserved at the right of the top bar for the minimize button,
+    --// which sits beside the move icon rather than in the search row
+    local RightBarInset = WindowInfo.Minimizable and 28 or 0
 
     do
         Library.KeybindFrame, Library.KeybindContainer = Library:AddDraggableMenu("Keybinds")
@@ -9774,8 +9788,8 @@ function Library:CreateWindow(WindowInfo)
         RightWrapper = New("Frame", {
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 1,
-            Position = UDim2.new(1, -49, 0.5, 0),
-            Size = UDim2.new(1, -InitialLeftWidth - 57 - 1, 1, -16),
+            Position = UDim2.new(1, -49 - RightBarInset, 0.5, 0),
+            Size = UDim2.new(1, -InitialLeftWidth - 57 - RightBarInset - 1, 1, -16),
             Parent = TopBar,
         })
 
@@ -9928,18 +9942,21 @@ function Library:CreateWindow(WindowInfo)
             end))
         end
 
-        --// Minimize: collapses the window down to a draggable pill \\--
+        --// Minimize: collapses the window to a small card \\--
         if WindowInfo.Minimizable then
             local MinimizeIcon = Library:GetIcon("minus")
 
+            --// Sits beside the move icon in the top right, not in the search row
             local MinimizeButton = New("TextButton", {
+                AnchorPoint = Vector2.new(1, 0.5),
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                LayoutOrder = 6,
+                Position = UDim2.new(1, -44, 0.5, 0),
                 Size = UDim2.fromOffset(24, 24),
                 Text = MinimizeIcon and "" or "—",
                 TextSize = 14,
                 TextTransparency = 0.35,
+                ZIndex = 3,
                 Parent = TopBar,
             })
             table.insert(
@@ -9950,8 +9967,9 @@ function Library:CreateWindow(WindowInfo)
                 })
             )
 
+            local MinimizeImage
             if MinimizeIcon then
-                New("ImageLabel", {
+                MinimizeImage = New("ImageLabel", {
                     AnchorPoint = Vector2.new(0.5, 0.5),
                     Image = MinimizeIcon.Url,
                     ImageColor3 = "FontColor",
@@ -9968,31 +9986,37 @@ function Library:CreateWindow(WindowInfo)
             Library:AddTooltip("Minimize", nil, MinimizeButton)
             MinimizeButton.MouseEnter:Connect(function()
                 TweenService:Create(MinimizeButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+                if MinimizeImage then
+                    TweenService:Create(MinimizeImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+                end
             end)
             MinimizeButton.MouseLeave:Connect(function()
                 TweenService:Create(MinimizeButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+                if MinimizeImage then
+                    TweenService:Create(MinimizeImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+                end
             end)
             MinimizeButton.MouseButton1Click:Connect(function()
                 Library.Window:SetMinimized(true)
             end)
 
-            --// The pill itself. Sized to its contents so long titles still fit.
-            MiniFrame = New("TextButton", {
-                AutomaticSize = Enum.AutomaticSize.X,
+            --// The minimized card: a header with the icon, title and subtitle, an
+            --// optional body of labels, and the window footer along the bottom.
+            MiniFrame = New("Frame", {
+                AutomaticSize = Enum.AutomaticSize.Y,
                 BackgroundColor3 = function()
                     return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
                 end,
-                Name = "Mini",
+                Name = "Minimized",
                 Position = WindowInfo.Position,
-                Size = UDim2.fromOffset(0, 34),
-                Text = "",
+                Size = UDim2.fromOffset(WindowInfo.MinimizedWidth, 0),
                 Visible = false,
                 Parent = ScreenGui,
             })
             table.insert(
-                Library.PillCorners,
+                Library.Corners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(1, 0),
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
                     Parent = MiniFrame,
                 })
             )
@@ -10005,94 +10029,192 @@ function Library:CreateWindow(WindowInfo)
             Library:AddOutline(MiniFrame)
 
             New("UIListLayout", {
-                FillDirection = Enum.FillDirection.Horizontal,
-                Padding = UDim.new(0, 8),
-                VerticalAlignment = Enum.VerticalAlignment.Center,
+                FillDirection = Enum.FillDirection.Vertical,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = MiniFrame,
+            })
+
+            --// Header \\--
+            local MiniHeader = New("Frame", {
+                BackgroundTransparency = 1,
+                LayoutOrder = 0,
+                Size = UDim2.new(1, 0, 0, 46),
                 Parent = MiniFrame,
             })
             New("UIPadding", {
                 PaddingLeft = UDim.new(0, 12),
-                PaddingRight = UDim.new(0, 12),
-                Parent = MiniFrame,
+                PaddingRight = UDim.new(0, 10),
+                Parent = MiniHeader,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                Padding = UDim.new(0, 10),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Parent = MiniHeader,
             })
 
-            --// Resolved the same way the header icon is
-            local WindowIconData = WindowInfo.Icon and Library:GetCustomIcon(WindowInfo.Icon) or nil
-            if WindowIconData then
-                New("ImageLabel", {
-                    Image = WindowIconData.Url,
-                    ImageRectOffset = WindowIconData.ImageRectOffset,
-                    ImageRectSize = WindowIconData.ImageRectSize,
+            local MiniIconData = WindowInfo.Icon and Library:GetCustomIcon(WindowInfo.Icon) or nil
+            if MiniIconData then
+                --// Rounded badge so the icon reads as an app mark
+                local IconHolder = New("Frame", {
+                    BackgroundColor3 = "MainColor",
                     LayoutOrder = 0,
+                    Size = UDim2.fromOffset(26, 26),
+                    Parent = MiniHeader,
+                })
+                table.insert(
+                    Library.Corners,
+                    New("UICorner", {
+                        CornerRadius = UDim.new(0, math.max(2, WindowInfo.CornerRadius)),
+                        Parent = IconHolder,
+                    })
+                )
+
+                New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Image = MiniIconData.Url,
+                    ImageRectOffset = MiniIconData.ImageRectOffset,
+                    ImageRectSize = MiniIconData.ImageRectSize,
+                    Position = UDim2.fromScale(0.5, 0.5),
                     ScaleType = Enum.ScaleType.Fit,
-                    Size = UDim2.fromOffset(18, 18),
-                    Parent = MiniFrame,
+                    Size = UDim2.fromOffset(16, 16),
+                    Parent = IconHolder,
                 })
             end
 
-            New("TextLabel", {
-                AutomaticSize = Enum.AutomaticSize.X,
+            --// Title stacked over the subtitle
+            local MiniTitleHolder = New("Frame", {
                 BackgroundTransparency = 1,
                 LayoutOrder = 1,
-                Size = UDim2.fromOffset(0, 18),
+                Size = UDim2.new(1, 0, 1, 0),
+                Parent = MiniHeader,
+            })
+            New("UIFlexItem", {
+                FlexMode = Enum.UIFlexMode.Shrink,
+                Parent = MiniTitleHolder,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Vertical,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Parent = MiniTitleHolder,
+            })
+
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                LayoutOrder = 0,
+                Size = UDim2.new(1, 0, 0, 17),
                 Text = `<b>{WindowInfo.Title}</b>`,
-                TextSize = 14,
-                Parent = MiniFrame,
+                TextSize = 15,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = MiniTitleHolder,
+            })
+
+            MiniSubtitle = New("TextLabel", {
+                BackgroundTransparency = 1,
+                LayoutOrder = 1,
+                Size = UDim2.new(1, 0, 0, 14),
+                Text = WindowInfo.MinimizedSubtitle or "",
+                TextSize = 12,
+                TextTransparency = 0.55,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Visible = (WindowInfo.MinimizedSubtitle or "") ~= "",
+                Parent = MiniTitleHolder,
             })
 
             local RestoreIcon = Library:GetIcon("chevron-up")
             local RestoreButton = New("TextButton", {
                 BackgroundTransparency = 1,
                 LayoutOrder = 2,
-                Size = UDim2.fromOffset(18, 18),
+                Size = UDim2.fromOffset(22, 22),
                 Text = RestoreIcon and "" or "^",
                 TextSize = 14,
                 TextTransparency = 0.35,
-                Parent = MiniFrame,
+                Parent = MiniHeader,
             })
 
             if RestoreIcon then
                 New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
                     Image = RestoreIcon.Url,
                     ImageColor3 = "FontColor",
                     ImageRectOffset = RestoreIcon.ImageRectOffset,
                     ImageRectSize = RestoreIcon.ImageRectSize,
                     ImageTransparency = 0.35,
+                    Position = UDim2.fromScale(0.5, 0.5),
                     ScaleType = Enum.ScaleType.Fit,
-                    Size = UDim2.fromScale(1, 1),
+                    Size = UDim2.fromOffset(16, 16),
                     Parent = RestoreButton,
                 })
             end
 
             Library:AddTooltip("Restore", nil, RestoreButton)
-
-            local function Restore()
+            RestoreButton.MouseButton1Click:Connect(function()
                 Library.Window:SetMinimized(false)
-            end
-            RestoreButton.MouseButton1Click:Connect(Restore)
-
-            --// Dragging the pill must not also count as a click to restore
-            local MiniDragged = false
-            MiniFrame.MouseButton1Down:Connect(function()
-                MiniDragged = false
-            end)
-            MiniFrame:GetPropertyChangedSignal("Position"):Connect(function()
-                MiniDragged = true
-            end)
-            MiniFrame.MouseButton1Click:Connect(function()
-                if not MiniDragged then
-                    Restore()
-                end
             end)
 
-            Library:MakeDraggable(MiniFrame, MiniFrame, true)
+            --// Body: labels the script adds, hidden until there is one \\--
+            MiniBody = New("Frame", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                LayoutOrder = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Visible = false,
+                Parent = MiniFrame,
+            })
+            New("UIPadding", {
+                PaddingBottom = UDim.new(0, 10),
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12),
+                Parent = MiniBody,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Vertical,
+                Padding = UDim.new(0, 4),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = MiniBody,
+            })
+
+            --// Footer \\--
+            MiniFooterHolder = New("Frame", {
+                BackgroundTransparency = 1,
+                LayoutOrder = 2,
+                Size = UDim2.new(1, 0, 0, 26),
+                Parent = MiniFrame,
+            })
+            Library:MakeLine(MiniFooterHolder, {
+                Position = UDim2.fromOffset(0, 0),
+                Size = UDim2.new(1, 0, 0, 1),
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12),
+                Parent = MiniFooterHolder,
+            })
+
+            MiniFooter = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "",
+                TextSize = 12,
+                TextTransparency = 0.6,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = MiniFooterHolder,
+            })
+
+            --// Drag by the header, so clicks on the buttons still register
+            Library:MakeDraggable(MiniFrame, MiniHeader, true)
 
             if WindowInfo.Shadow then
                 Library:MakeShadow(MiniFrame, {
                     Layers = WindowInfo.ShadowLayers,
                     Spread = WindowInfo.ShadowSpread,
                     Transparency = WindowInfo.ShadowTransparency,
-                    CornerRadius = 17,
+                    CornerRadius = WindowInfo.CornerRadius,
                 })
             end
         end
@@ -10293,7 +10415,34 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
+        --// The minimized card shows the same footer, flattened to plain text since it
+        --// has no room for per segment copy buttons
+        function BuildMiniFooter(Footer)
+            if not MiniFooter then
+                return
+            end
+
+            if typeof(Footer) == "string" then
+                MiniFooter.Text = Footer
+            else
+                local Parts = {}
+
+                for _, Segment in Footer do
+                    if typeof(Segment) == "string" then
+                        table.insert(Parts, Segment)
+                    elseif typeof(Segment) == "table" and Segment.Text ~= nil then
+                        table.insert(Parts, tostring(Segment.Text))
+                    end
+                end
+
+                MiniFooter.Text = table.concat(Parts, " ")
+            end
+
+            MiniFooterHolder.Visible = MiniFooter.Text ~= ""
+        end
+
         BuildFooter(WindowInfo.Footer)
+        BuildMiniFooter(WindowInfo.Footer)
 
         --// Resize Button \\--
         if WindowInfo.Resizable then
@@ -10450,6 +10599,7 @@ function Library:CreateWindow(WindowInfo)
         )
 
         BuildFooter(Footer)
+        BuildMiniFooter(Footer)
         WindowInfo.Footer = Footer
     end
 
@@ -10599,6 +10749,71 @@ function Library:CreateWindow(WindowInfo)
         Window:SetMinimized(not Minimized)
     end
 
+    function Window:SetMinimizedSubtitle(Text: string?)
+        if not MiniSubtitle then
+            return
+        end
+
+        Text = Text or ""
+        MiniSubtitle.Text = Text
+        MiniSubtitle.Visible = Text ~= ""
+    end
+
+    --// A line of text on the minimized card, for status a script wants visible while
+    --// the window is collapsed. Returns a handle so it can be updated or removed.
+    function Window:AddMinimizedLabel(Text: string?)
+        if not MiniBody then
+            return
+        end
+
+        local Label = New("TextLabel", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            LayoutOrder = #MiniLabels,
+            Size = UDim2.new(1, 0, 0, 0),
+            Text = Text or "",
+            TextSize = 13,
+            TextTransparency = 0.25,
+            TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = MiniBody,
+        })
+
+        local Handle = {
+            Label = Label,
+            Type = "MinimizedLabel",
+        }
+
+        function Handle:SetText(Value: string?)
+            Label.Text = Value or ""
+        end
+
+        function Handle:SetVisible(Value: boolean)
+            Label.Visible = Value and true or false
+        end
+
+        function Handle:Destroy()
+            local Index = table.find(MiniLabels, Handle)
+            if Index then
+                table.remove(MiniLabels, Index)
+            end
+
+            Label:Destroy()
+            MiniBody.Visible = #MiniLabels > 0
+        end
+
+        table.insert(MiniLabels, Handle)
+        MiniBody.Visible = true
+
+        return Handle
+    end
+
+    function Window:ClearMinimizedLabels()
+        for Index = #MiniLabels, 1, -1 do
+            MiniLabels[Index]:Destroy()
+        end
+    end
+
     function Window:SetCompact(State)
         Window:SetSidebarWidth(State and WindowInfo.SidebarCompactWidth or LastExpandedWidth)
     end
@@ -10613,7 +10828,7 @@ function Library:CreateWindow(WindowInfo)
         DividerLine.Position = UDim2.fromOffset(Width, 0)
 
         TitleHolder.Size = UDim2.new(0, Width, 1, 0)
-        RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
+        RightWrapper.Size = UDim2.new(1, -Width - 57 - RightBarInset - 1, 1, -16)
         Tabs.Size = UDim2.new(0, Width, 1, -70)
         Container.Size = UDim2.new(1, -Width - 1, 1, -70)
 

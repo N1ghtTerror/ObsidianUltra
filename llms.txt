@@ -196,6 +196,12 @@ children above their parent. They track the frame's position, size, anchor point
 visibility, and they carry their own `UIScale` so DPI scaling stays in step. Their corners
 are registered in `Library.Corners`, so they follow `Window:SetCornerRadius`.
 
+The colour comes from `Library.Scheme.ShadowColor` (black by default), which is a real
+scheme entry: it appears in the theme manager as **Shadow color**, is saved and loaded
+with custom themes, and repaints live through the registry. Set it to an accent colour for
+a glow rather than a shadow. Built in themes predate it and do not name one, so applying a
+built in theme resets it to black instead of leaving the previous theme's colour behind.
+
 The same helper is public, for custom frames:
 
 ```lua
@@ -204,17 +210,22 @@ Shadow:SetVisible(false)
 Shadow:Destroy()
 ```
 
+Pass `Color` to override: a scheme key such as `"AccentColor"` keeps it themeable, while a
+`Color3` pins it for that frame only.
+
 ## Minimize
 
-The window can collapse to a small draggable pill showing the window icon, its title, and
-a restore chevron. A minimize button sits in the header, to the right of the search box.
-This is **not** the same as sidebar compacting (`Window:SetCompact`), which only narrows
-the sidebar and leaves the window at full size.
+The window can collapse to a small card rather than closing. The minimize button sits in
+the top right of the header, immediately left of the move icon, and the top bar reserves
+room for it. This is **not** the same as sidebar compacting (`Window:SetCompact`), which
+only narrows the sidebar and leaves the window at full size.
 
 ```lua
 Library:CreateWindow({
-    Minimizable = true,                     -- default true, removes the header button when false
+    Minimizable = true,                     -- default true, removes the button when false
     MinimizeKeybind = Enum.KeyCode.RightBracket, -- optional, no default
+    MinimizedWidth = 300,
+    MinimizedSubtitle = "0/3 connected",
 })
 
 Window:SetMinimized(true)
@@ -222,10 +233,34 @@ Window:ToggleMinimized()
 Window:IsMinimized()
 ```
 
-The pill opens at the window's last position rather than jumping to a corner, and restoring
-moves the window to wherever the pill was dragged. Clicking the pill restores; dragging it
-does not. The keybind is ignored while a text box has focus, and both the pill and the
-window stay hidden while the UI is toggled off, so minimizing never fights `Library:Toggle`.
+The card is fixed width and grows vertically to fit its contents. It has three parts:
+
+- a **header** with the window icon in a rounded badge, the title in bold, an optional
+  smaller subtitle beneath it, and a restore chevron on the right
+- a **body** of labels, hidden entirely until the script adds one
+- a **footer** showing the window footer, separated by a line
+
+The footer is the same value passed to `Footer` or `Window:SetFooter`, flattened to plain
+text; the card has no room for per segment copy buttons, so a list of segments is joined
+with spaces and none of it is copyable there.
+
+Labels let a script keep status visible while collapsed:
+
+```lua
+local Status = Window:AddMinimizedLabel("Idle")
+Status:SetText("Farming: 3 running")
+Status:SetVisible(false)
+Status:Destroy()
+
+Window:SetMinimizedSubtitle("0/3 connected")
+Window:ClearMinimizedLabels()
+```
+
+The card opens at the window's last position rather than jumping to a corner, and restoring
+moves the window to wherever the card was dragged. It is dragged by its header, so the
+restore button still takes clicks. The keybind is ignored while a text box has focus, and
+both the card and the window stay hidden while the UI is toggled off, so minimizing never
+fights `Library:Toggle`.
 
 ## Restyled toggles and sliders
 
