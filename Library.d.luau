@@ -12,7 +12,6 @@ export type Scheme = {
     Font: Font,
     RedColor: Color3,
     BlueColor: Color3,
-    ShadowColor: Color3,
     DestructiveColor: Color3,
     DarkColor: Color3,
     WhiteColor: Color3,
@@ -27,17 +26,6 @@ export type MinimizedLabel = {
     SetText: (self: MinimizedLabel, Value: string?) -> (),
     SetVisible: (self: MinimizedLabel, Value: boolean) -> (),
     Destroy: (self: MinimizedLabel) -> (),
-}
-
---// Stacked offset frames sitting behind a GuiObject, used as a soft drop shadow.
-export type Shadow = {
-    Layers: { Frame },
-    Destroyed: boolean,
-
-    --// Re-reads the tracked frame; connected to its Position/Size/Visible already
-    Update: (self: Shadow) -> (),
-    SetVisible: (self: Shadow, Value: boolean) -> (),
-    Destroy: (self: Shadow) -> (),
 }
 
 --// One piece of the window footer. Copyable segments are highlighted in blue and
@@ -1095,18 +1083,6 @@ export type Library = {
     MakeCover: (self: Library, Holder: GuiObject, Place: string) -> Frame,
     MakeLine: (self: Library, Frame: GuiObject, Info: { AnchorPoint: Vector2?, Position: UDim2, Size: UDim2 }) -> Frame,
     AddOutline: (self: Library, Frame: GuiObject) -> Frame,
-    MakeShadow: (
-        self: Library,
-        Frame: GuiObject,
-        Info: {
-            Layers: number?,
-            Spread: number?,
-            Transparency: number?,
-            CornerRadius: number?,
-            --// A scheme key such as "ShadowColor" stays themeable; a Color3 is fixed
-            Color: (string | Color3)?,
-        }?
-    ) -> Shadow,
     AddBlank: (self: Library, Frame: GuiObject, Size: UDim2) -> (),
     MakeOutline: (self: Library, Frame: GuiObject, Corner: number?, ZIndex: number?) -> Frame,
     AddDraggableLabel: (
@@ -1207,10 +1183,6 @@ export type Library = {
             GlobalSearch: boolean?,
             FuzzySearch: boolean?,
             SearchValues: boolean?,
-            Shadow: boolean?,
-            ShadowLayers: number?,
-            ShadowSpread: number?,
-            ShadowTransparency: number?,
             Minimizable: boolean?,
             MinimizeKeybind: Enum.KeyCode?,
             MinimizedWidth: number?,

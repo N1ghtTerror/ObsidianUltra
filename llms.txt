@@ -176,43 +176,6 @@ also be changed directly. `DisableSearchKeybind = true` disables only the focus 
 `GlobalSearch` is separate: it still decides whether a query searches every top-level tab
 or only the active one.
 
-## Window shadow
-
-The window is drawn with a soft drop shadow, on by default. It is built from stacked
-offset frames rather than a sliced image, so it needs no asset and cannot fail to load in
-an executor that blocks asset fetching.
-
-```lua
-Library:CreateWindow({
-    Shadow = true,
-    ShadowLayers = 4,        -- 1 to 10
-    ShadowSpread = 4,        -- pixels each layer grows past the one before it
-    ShadowTransparency = 0.72, -- transparency of the innermost layer
-})
-```
-
-Layers are siblings of the frame they fall behind, not children, because Roblox draws
-children above their parent. They track the frame's position, size, anchor point, and
-visibility, and they carry their own `UIScale` so DPI scaling stays in step. Their corners
-are registered in `Library.Corners`, so they follow `Window:SetCornerRadius`.
-
-The colour comes from `Library.Scheme.ShadowColor` (black by default), which is a real
-scheme entry: it appears in the theme manager as **Shadow color**, is saved and loaded
-with custom themes, and repaints live through the registry. Set it to an accent colour for
-a glow rather than a shadow. Built in themes predate it and do not name one, so applying a
-built in theme resets it to black instead of leaving the previous theme's colour behind.
-
-The same helper is public, for custom frames:
-
-```lua
-local Shadow = Library:MakeShadow(SomeFrame, { Layers = 3, Spread = 5 })
-Shadow:SetVisible(false)
-Shadow:Destroy()
-```
-
-Pass `Color` to override: a scheme key such as `"AccentColor"` keeps it themeable, while a
-`Color3` pins it for that frame only.
-
 ## Minimize
 
 The window can collapse to a small card rather than closing. The minimize button sits in
@@ -225,7 +188,7 @@ Library:CreateWindow({
     Minimizable = true,                     -- default true, removes the button when false
     MinimizeKeybind = Enum.KeyCode.RightBracket, -- optional, no default
     MinimizedWidth = 300,
-    MinimizedSubtitle = "0/3 connected",
+    MinimizedSubtitle = "",  -- empty means "track the open tab"
 })
 
 Window:SetMinimized(true)
@@ -233,18 +196,26 @@ Window:ToggleMinimized()
 Window:IsMinimized()
 ```
 
+**The card needs no setup.** It is part of the window, built whenever `Minimizable` is on,
+and fills itself in from what the window already knows. A script that never touches the
+minimize API still gets a working card.
+
 The card is fixed width and grows vertically to fit its contents. It has three parts:
 
-- a **header** with the window icon in a rounded badge, the title in bold, an optional
-  smaller subtitle beneath it, and a restore chevron on the right
+- a **header** with the window icon in a rounded badge, the title in bold, a smaller
+  subtitle beneath it, and a restore chevron on the right
 - a **body** of labels, hidden entirely until the script adds one
 - a **footer** showing the window footer, separated by a line
+
+The subtitle tracks the **open tab** by default, updating as tabs are switched. Passing
+`MinimizedSubtitle`, or calling `Window:SetMinimizedSubtitle`, takes it over; passing an
+empty string hands it back to the automatic tab name.
 
 The footer is the same value passed to `Footer` or `Window:SetFooter`, flattened to plain
 text; the card has no room for per segment copy buttons, so a list of segments is joined
 with spaces and none of it is copyable there.
 
-Labels let a script keep status visible while collapsed:
+Labels are the one optional part, for status worth seeing while collapsed:
 
 ```lua
 local Status = Window:AddMinimizedLabel("Idle")
@@ -253,6 +224,7 @@ Status:SetVisible(false)
 Status:Destroy()
 
 Window:SetMinimizedSubtitle("0/3 connected")
+Window:SetMinimizedSubtitle("")          -- back to tracking the open tab
 Window:ClearMinimizedLabels()
 ```
 

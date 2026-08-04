@@ -52,24 +52,13 @@ local Window = Library:CreateWindow({
 	SearchValues = true,
 	SearchKeybind = Enum.KeyCode.F,
 
-	-- Soft drop shadow behind the window (on by default). Built from stacked frames,
-	-- so it needs no image asset.
-	Shadow = true,
-	ShadowLayers = 4,
-	ShadowSpread = 4,
-	ShadowTransparency = 0.72,
-
-	-- Adds a minimize button next to the move icon that collapses the window to a
-	-- small card showing the title, subtitle, any labels, and the footer.
-	-- Not the same as sidebar compacting. MinimizeKeybind is optional.
+	-- The minimize button next to the move icon collapses the window to a small card
+	-- showing the title, the active tab, and the footer. It is on by default and needs
+	-- no setup; these options only tune it. Not the same as sidebar compacting.
 	Minimizable = true,
 	MinimizeKeybind = Enum.KeyCode.RightBracket,
 	MinimizedWidth = 300,
-	MinimizedSubtitle = "idle",
 })
-
--- Labels shown on the minimized card, so status stays visible while collapsed
-local MinimizedStatus = Window:AddMinimizedLabel("Nothing running")
 
 -- CALLBACK NOTE:
 -- Passing in callback functions via the initial element parameters (i.e. Callback = function(Value)...) works
@@ -761,7 +750,8 @@ LeftGroupBox2:AddLabel(
 	true
 )
 
--- Minimize demo: drives the card's subtitle and its status label
+-- Minimize demo. The card needs no setup: it already shows the window title, the
+-- open tab, and the footer. These only demonstrate the optional overrides.
 local MinimizeGroupBox = Tabs.Main:AddLeftGroupbox("Minimize", "minus")
 MinimizeGroupBox:AddButton({
 	Text = "Minimize the window",
@@ -769,12 +759,22 @@ MinimizeGroupBox:AddButton({
 		Window:SetMinimized(true)
 	end,
 })
+
+local MinimizedStatus
 MinimizeGroupBox:AddToggle("MinimizedBusy", {
 	Text = "Pretend something is running",
 	Default = false,
 	Callback = function(Value)
-		Window:SetMinimizedSubtitle(Value and "1 task running" or "idle")
-		MinimizedStatus:SetText(Value and "Farming: 1 running" or "Nothing running")
+		-- An empty subtitle hands the line back to the automatic tab name
+		Window:SetMinimizedSubtitle(Value and "1 task running" or "")
+
+		-- Extra lines on the card, for status worth seeing while collapsed
+		if Value and not MinimizedStatus then
+			MinimizedStatus = Window:AddMinimizedLabel("Farming: 1 running")
+		elseif not Value and MinimizedStatus then
+			MinimizedStatus:Destroy()
+			MinimizedStatus = nil
+		end
 	end,
 })
 

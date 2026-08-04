@@ -38,7 +38,7 @@ if typeof(clonefunction) == "function" then
     end
 end
 
-local SchemeIndexes = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "ShadowColor" }
+local SchemeIndexes = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
 local ThemeManager = {
     Library = nil,
 
@@ -562,18 +562,6 @@ function ThemeManager:ApplyTheme(ThemeName: string)
         end
     end
 
-    --// Built in themes predate the shadow colour, so a theme that does not name one
-    --// falls back to black instead of inheriting it from whatever was applied before
-    if ThemeData.ShadowColor == nil then
-        local Fallback = Color3.new(0, 0, 0)
-        Library.Scheme.ShadowColor = Fallback
-
-        local ShadowElement = Library.Options.ShadowColor
-        if ShadowElement then
-            ShadowElement:SetValue(Fallback)
-        end
-    end
-
     ThemeManager:ThemeUpdate()
     return true
 end
@@ -661,7 +649,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local AccentColor = CreateColorOption("Accent color", "AccentColor")
     local OutlineColor = CreateColorOption("Outline color", "OutlineColor")
     local FontColor = CreateColorOption("Font color", "FontColor")
-    local ShadowColor = CreateColorOption("Shadow color", "ShadowColor")
     
     Themesbox:AddDropdown("FontFace", {
         Text = "Font Face",
@@ -907,7 +894,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     AccentColor:OnChanged(UpdateTheme)
     OutlineColor:OnChanged(UpdateTheme)
     FontColor:OnChanged(UpdateTheme)
-    ShadowColor:OnChanged(UpdateTheme)
     FontFace:OnChanged(function(Value) ThemeManager.Library:SetFont(Enum.Font[Value]) end)
     BackgroundImage:OnChanged(function(Value) ThemeManager.Library:SetBackgroundImage(Value) end)
 

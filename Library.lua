@@ -278,7 +278,6 @@ local Library = {
 
         RedColor = Color3.fromRGB(255, 50, 50),
         BlueColor = Color3.fromRGB(80, 155, 255),
-        ShadowColor = Color3.new(0, 0, 0),
         DestructiveColor = Color3.fromRGB(220, 38, 38),
         DarkColor = Color3.new(0, 0, 0),
         WhiteColor = Color3.new(1, 1, 1),
@@ -381,11 +380,6 @@ local Templates = {
         SearchValues = true,
         SearchKeybind = Enum.KeyCode.F,
         DisableSearchKeybind = false,
-
-        Shadow = true,
-        ShadowLayers = 4,
-        ShadowSpread = 4,
-        ShadowTransparency = 0.72,
 
         Minimizable = true,
         MinimizeKeybind = nil,
@@ -2024,107 +2018,6 @@ function Library:AddOutline(Frame: GuiObject)
         Parent = Frame,
     })
     return OutlineStroke, ShadowStroke
-end
-
---// Soft drop shadow built from stacked offset frames rather than a sliced image, so it
---// needs no asset and cannot fail to load. Roblox draws children above their parent, so
---// the layers are siblings of the frame and track its position and size.
-function Library:MakeShadow(Frame: GuiObject, Info)
-    Info = Info or {}
-
-    local Layers = math.clamp(Info.Layers or 4, 1, 10)
-    local Spread = Info.Spread or 4
-    local StartTransparency = Info.Transparency or 0.72
-    local Radius = Info.CornerRadius or Library.CornerRadius
-    --// A scheme key keeps the glow themeable; a Color3 pins it for one frame
-    local Color = Info.Color or "ShadowColor"
-
-    local Shadow = {
-        Layers = {},
-        Connections = {},
-        Destroyed = false,
-    }
-
-    for Index = 1, Layers do
-        --// Each layer sits further out and fades, approximating a blur
-        local Fade = StartTransparency + (1 - StartTransparency) * ((Index - 1) / Layers)
-
-        local Layer = New("Frame", {
-            BackgroundColor3 = Color,
-            BackgroundTransparency = math.clamp(Fade, 0, 1),
-            Name = "Shadow",
-            --// Below the frame it falls behind, but still above the backdrop
-            ZIndex = math.max(0, Frame.ZIndex - 1),
-            Parent = Frame.Parent,
-        })
-
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, Radius + Index * Spread),
-                Parent = Layer,
-            })
-        )
-        --// The frame it tracks is DPI scaled, so the shadow has to scale with it
-        table.insert(
-            Library.Scales,
-            New("UIScale", {
-                Scale = Library.DPIScale,
-                Parent = Layer,
-            })
-        )
-
-        table.insert(Shadow.Layers, Layer)
-    end
-
-    function Shadow:Update()
-        if Shadow.Destroyed then
-            return
-        end
-
-        for Index, Layer in Shadow.Layers do
-            local Offset = Index * Spread
-
-            Layer.AnchorPoint = Frame.AnchorPoint
-            Layer.Position = Frame.Position - UDim2.fromOffset(Offset, Offset)
-            Layer.Size = Frame.Size + UDim2.fromOffset(Offset * 2, Offset * 2)
-            Layer.Visible = Frame.Visible
-        end
-    end
-
-    function Shadow:SetVisible(Value: boolean)
-        for _, Layer in Shadow.Layers do
-            Layer.Visible = Value and Frame.Visible
-        end
-    end
-
-    function Shadow:Destroy()
-        Shadow.Destroyed = true
-
-        for _, Connection in Shadow.Connections do
-            if Connection and Connection.Connected then
-                Connection:Disconnect()
-            end
-        end
-        table.clear(Shadow.Connections)
-
-        for _, Layer in Shadow.Layers do
-            Layer:Destroy()
-        end
-        table.clear(Shadow.Layers)
-    end
-
-    for _, Property in { "Position", "Size", "Visible", "AnchorPoint" } do
-        table.insert(
-            Shadow.Connections,
-            Library:GiveSignal(Frame:GetPropertyChangedSignal(Property):Connect(function()
-                Shadow:Update()
-            end))
-        )
-    end
-
-    Shadow:Update()
-    return Shadow
 end
 
 function Library:AddBlank(Frame: GuiObject, Size: UDim2)
@@ -9628,13 +9521,14 @@ function Library:CreateWindow(WindowInfo)
     local BuildFooter
     local BuildMiniFooter
     local TopBar
-    local WindowShadow
     local MiniFrame
     local MiniSubtitle
     local MiniBody
     local MiniFooterHolder
     local MiniFooter
     local MiniLabels = {}
+    --// With no subtitle given, the card tracks the open tab on its own
+    local MiniSubtitleExplicit = (WindowInfo.MinimizedSubtitle or "") ~= ""
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
     local IsCompact = WindowInfo.SidebarCompacted
@@ -9678,16 +9572,6 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(MainFrame)
-
-        if WindowInfo.Shadow then
-            WindowShadow = Library:MakeShadow(MainFrame, {
-                Layers = WindowInfo.ShadowLayers,
-                Spread = WindowInfo.ShadowSpread,
-                Transparency = WindowInfo.ShadowTransparency,
-                CornerRadius = WindowInfo.CornerRadius,
-            })
-        end
-
         Library:MakeLine(MainFrame, {
             Position = UDim2.fromOffset(0, 48),
             Size = UDim2.new(1, 0, 0, 1),
@@ -10208,15 +10092,6 @@ function Library:CreateWindow(WindowInfo)
 
             --// Drag by the header, so clicks on the buttons still register
             Library:MakeDraggable(MiniFrame, MiniHeader, true)
-
-            if WindowInfo.Shadow then
-                Library:MakeShadow(MiniFrame, {
-                    Layers = WindowInfo.ShadowLayers,
-                    Spread = WindowInfo.ShadowSpread,
-                    Transparency = WindowInfo.ShadowTransparency,
-                    CornerRadius = WindowInfo.CornerRadius,
-                })
-            end
         end
 
         if MoveIcon then
@@ -10739,24 +10614,30 @@ function Library:CreateWindow(WindowInfo)
         end
 
         ApplyWindowVisibility()
-
-        if WindowShadow then
-            WindowShadow:SetVisible(not Minimized)
-        end
     end
 
     function Window:ToggleMinimized()
         Window:SetMinimized(not Minimized)
     end
 
+    --// Passing nil or an empty string hands the line back to the automatic tab name
     function Window:SetMinimizedSubtitle(Text: string?)
         if not MiniSubtitle then
             return
         end
 
         Text = Text or ""
-        MiniSubtitle.Text = Text
-        MiniSubtitle.Visible = Text ~= ""
+        MiniSubtitleExplicit = Text ~= ""
+
+        if MiniSubtitleExplicit then
+            MiniSubtitle.Text = Text
+            MiniSubtitle.Visible = true
+        elseif Library.ActiveTab then
+            MiniSubtitle.Text = Library.ActiveTab.Name or ""
+            MiniSubtitle.Visible = MiniSubtitle.Text ~= ""
+        else
+            MiniSubtitle.Visible = false
+        end
     end
 
     --// A line of text on the minimized card, for status a script wants visible while
@@ -10849,6 +10730,13 @@ function Library:CreateWindow(WindowInfo)
         CurrentTabDescription.Visible = Description ~= ""
 
         CurrentTabInfo.Visible = true
+
+        --// Keep the minimized card in step unless a subtitle was set explicitly
+        if MiniSubtitle and not MiniSubtitleExplicit then
+            Name = Name or ""
+            MiniSubtitle.Text = Name
+            MiniSubtitle.Visible = Name ~= ""
+        end
     end
 
     function Window:HideTabInfo()

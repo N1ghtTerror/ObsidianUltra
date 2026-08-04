@@ -5,10 +5,8 @@
 + Search v2 with fuzzy subsequence matching, Dropdown/Input/KeyPicker value search, and groupbox/tabbox/sub-tab name matching
 + Ctrl+F now focuses the searchbar; Escape clears it and releases focus
 + Library.FuzzySearch, Library.SearchValues, WindowInfo.FuzzySearch, WindowInfo.SearchValues, WindowInfo.SearchKeybind, WindowInfo.DisableSearchKeybind
-+ Soft drop shadow behind the window, built from stacked frames so it needs no asset
-+ Library:MakeShadow for custom frames, plus WindowInfo.Shadow, ShadowLayers, ShadowSpread, ShadowTransparency
-+ Library.Scheme.ShadowColor, editable in the theme manager as "Shadow color" and saved with custom themes
 + Minimize the window to a card with title, subtitle, labels and footer; button sits beside the move icon
++ The card is built into the window and needs no setup: its subtitle tracks the open tab and its footer mirrors the window footer
 + Window:SetMinimized/ToggleMinimized/IsMinimized, SetMinimizedSubtitle, AddMinimizedLabel, ClearMinimizedLabels
 + WindowInfo.Minimizable, MinimizeKeybind, MinimizedWidth, MinimizedSubtitle
 
