@@ -1,3 +1,12 @@
+## 05.08.2026
+
+```diff
+[features]
++ Built in "Select All" / "Deselect All" row on multi dropdowns, in the inline list and the expanded panel
++ It skips disabled values and, while a search is typed, only touches the matching ones
++ Dropdown:SelectAll(Search?), Dropdown:DeselectAll(Search?), DropdownInfo.SelectAllButtons
+```
+
 ## 04.08.2026
 
 ```diff

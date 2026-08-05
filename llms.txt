@@ -261,6 +261,25 @@ stay fully rounded at any corner radius above 0 and square off at 0. Keybind but
 deliberately **not** pills: their menu attaches to the right edge and squares those corners
 off while open.
 
+## Select All / Deselect All
+
+Multi select dropdowns get a built in row above their values with **Select All** and
+**Deselect All**, in both the inline list and the expanded panel. It skips disabled values,
+and while a search is typed it only touches the values matching that search.
+
+```lua
+Groupbox:AddDropdown("Materials", {
+    Values = Materials,
+    Multi = true,
+
+    SelectAllButtons = true, -- default; false removes the row
+})
+```
+
+Methods: `Dropdown:SelectAll(Search?)` and `Dropdown:DeselectAll(Search?)`. Both are multi
+only, both fire the callback once, and `DeselectAll` keeps one value picked when
+`AllowNull` is false.
+
 ## Expandable dropdowns
 
 Every dropdown gets a small expand button beside its arrow. Clicking it opens all of the

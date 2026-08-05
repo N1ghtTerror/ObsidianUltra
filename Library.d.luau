@@ -188,6 +188,8 @@ export type DropdownInfo = {
     DisabledValues: { any }?,
     Multi: boolean?,
     MaxVisibleDropdownItems: number?,
+    --// Built in "Select All" / "Deselect All" row, multi dropdowns only (default true)
+    SelectAllButtons: boolean?,
     --// Expandable adds a button that opens the values in a panel over the window
     Expandable: boolean?,
     ExpandColumns: number?,
@@ -515,6 +517,9 @@ export type Dropdown = {
     GetActiveValues: (self: Dropdown) -> { any } | number,
     BuildDropdownList: (self: Dropdown) -> (),
     SetValue: (self: Dropdown, Value: any) -> (),
+    --// Multi only, Search optionally limits them to values matching that text
+    SelectAll: (self: Dropdown, Search: string?) -> (),
+    DeselectAll: (self: Dropdown, Search: string?) -> (),
     SetValues: (self: Dropdown, Values: { any }) -> (),
     AddValues: (self: Dropdown, Values: { any } | string) -> (),
     SetDisabledValues: (self: Dropdown, DisabledValues: { any }) -> (),

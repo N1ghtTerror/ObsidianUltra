@@ -531,6 +531,12 @@ DropdownGroupBox:AddDropdown("MyMultiDropdown", {
 	Default = 1,
 	Multi = true, -- true / false, allows multiple choices to be selected
 
+	-- Multi dropdowns get a built in "Select All" / "Deselect All" row above their values,
+	-- in the inline list and the expanded panel. It skips disabled values, and while a
+	-- search is typed it only touches the matching ones. Set to false to remove the row.
+	-- Also available as Dropdown:SelectAll() / Dropdown:DeselectAll()
+	SelectAllButtons = true,
+
 	Text = "A multi dropdown",
 	Tooltip = "This is a tooltip", -- Information shown when you hover over the dropdown
 

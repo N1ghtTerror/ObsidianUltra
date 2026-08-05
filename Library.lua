@@ -514,6 +514,9 @@ local Templates = {
         DragSelect = false,
         MaxVisibleDropdownItems = 8,
 
+        --// Built in "Select All" / "Deselect All" row, multi dropdowns only
+        SelectAllButtons = true,
+
         --// Opens the values in a large panel over the window
         Expandable = true,
         ExpandColumns = 2,
@@ -6974,8 +6977,15 @@ do
         )
         Dropdown.Menu = MenuTable
 
+        --// Built in "Select All" / "Deselect All" row, kept out of Buttons so a
+        --// rebuild leaves it alone
+        local UseSelectAll = Info.Multi and Info.SelectAllButtons ~= false
+        local SelectAllRow
+
         function Dropdown:RecalculateListSize(Count)
-            local Y = math.clamp((Count or GetTableSize(Dropdown.Values)) * 21, 0, Info.MaxVisibleDropdownItems * 21)
+            local Extra = SelectAllRow and 1 or 0
+            local Rows = (Count or GetTableSize(Dropdown.Values)) + Extra
+            local Y = math.clamp(Rows * 21, 0, (Info.MaxVisibleDropdownItems + Extra) * 21)
 
             MenuTable:SetSize(function()
                 return UDim2.fromOffset((DisplayContainer.AbsoluteSize.X / Library.DPIScale), Y)
@@ -7110,6 +7120,62 @@ do
             Dropdown:RunChanged()
         end
 
+        --// Every value the user could click right now, search filter included
+        local function GetSelectableValues(Search)
+            local Table = {}
+
+            for _, Value in Dropdown.Values do
+                if table.find(Dropdown.DisabledValues, Value) then
+                    continue
+                end
+
+                if Search and Search ~= "" then
+                    local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
+                    if not TextMatches(FormattedValue, Search) then
+                        continue
+                    end
+                end
+
+                table.insert(Table, Value)
+            end
+
+            return Table
+        end
+
+        local function ApplyBulkSelection(State, Search)
+            if not Info.Multi then
+                return
+            end
+
+            local Values = GetSelectableValues(Search)
+            if #Values == 0 then
+                return
+            end
+
+            for _, Value in Values do
+                Dropdown.Value[Value] = State or nil
+            end
+
+            --// Something has to stay picked when null is not allowed
+            if not State and not Info.AllowNull and Dropdown:GetActiveValues(true) == 0 then
+                Dropdown.Value[Values[1]] = true
+            end
+
+            RefreshButtons()
+            Dropdown:Display()
+
+            Library:UpdateDependencyBoxes()
+            Dropdown:RunChanged()
+        end
+
+        function Dropdown:SelectAll(Search)
+            ApplyBulkSelection(true, Search)
+        end
+
+        function Dropdown:DeselectAll(Search)
+            ApplyBulkSelection(false, Search)
+        end
+
         local DragSelecting = false
         local DragStartIndex = nil
         local DragInitialValues = {}
@@ -7153,7 +7219,54 @@ do
             Dropdown:Display()
         end
 
+        local function BuildSelectAllRow()
+            if SelectAllRow or not UseSelectAll then
+                return
+            end
+
+            SelectAllRow = New("Frame", {
+                BackgroundTransparency = 1,
+                LayoutOrder = -1,
+                Size = UDim2.new(1, 0, 0, 21),
+                Parent = MenuTable.Menu,
+            })
+            Library:MakeLine(SelectAllRow, {
+                AnchorPoint = Vector2.new(0, 1),
+                Position = UDim2.fromScale(0, 1),
+                Size = UDim2.new(1, 0, 0, 1),
+            })
+
+            local function MakeButton(Text, Offset, State)
+                local Button = New("TextButton", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromScale(Offset, 0),
+                    Size = UDim2.new(0.5, 0, 1, 0),
+                    Text = Text,
+                    TextSize = 14,
+                    TextTransparency = 0.5,
+                    Parent = SelectAllRow,
+                })
+
+                Button.MouseEnter:Connect(function()
+                    TweenService:Create(Button, Library.TweenInfo, { TextTransparency = 0 }):Play()
+                end)
+                Button.MouseLeave:Connect(function()
+                    TweenService:Create(Button, Library.TweenInfo, { TextTransparency = 0.5 }):Play()
+                end)
+                Button.MouseButton1Click:Connect(function()
+                    ApplyBulkSelection(State, SearchBox and SearchBox.Text:lower() or nil)
+                end)
+
+                return Button
+            end
+
+            MakeButton("Select All", 0, true)
+            MakeButton("Deselect All", 0.5, false)
+        end
+
         function Dropdown:BuildDropdownList()
+            BuildSelectAllRow()
+
             local Values = Dropdown.Values
             local DisabledValues = Dropdown.DisabledValues
 
@@ -7699,6 +7812,55 @@ do
             local Columns = math.max(1, Info.ExpandColumns or 2)
             local Search = ExpandSearchBox and ExpandSearchBox.Text:lower() or ""
             local Count = 0
+
+            if UseSelectAll then
+                local function MakeBulkItem(Text, Order, State)
+                    local Item = New("Frame", {
+                        BackgroundColor3 = "MainColor",
+                        BackgroundTransparency = 1,
+                        LayoutOrder = Order,
+                        Parent = ExpandList,
+                    })
+                    table.insert(
+                        Library.Corners,
+                        New("UICorner", {
+                            CornerRadius = UDim.new(0, Library.CornerRadius / 2),
+                            Parent = Item,
+                        })
+                    )
+                    New("UIStroke", {
+                        Color = "OutlineColor",
+                        Transparency = 0.5,
+                        Parent = Item,
+                    })
+
+                    local Button = New("TextButton", {
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromScale(1, 1),
+                        Text = Text,
+                        TextSize = 14,
+                        TextTransparency = 0.4,
+                        TextTruncate = Enum.TextTruncate.AtEnd,
+                        Parent = Item,
+                    })
+
+                    Button.MouseEnter:Connect(function()
+                        TweenService:Create(Item, Library.TweenInfo, { BackgroundTransparency = 0.5 }):Play()
+                    end)
+                    Button.MouseLeave:Connect(function()
+                        TweenService:Create(Item, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+                    end)
+                    Button.MouseButton1Click:Connect(function()
+                        ApplyBulkSelection(State, Search)
+                    end)
+
+                    --// Tracked so a rebuild cleans it up like any other item
+                    ExpandedButtons[Button] = { UpdateButton = function() end }
+                end
+
+                MakeBulkItem("Select All", -2, true)
+                MakeBulkItem("Deselect All", -1, false)
+            end
 
             for _, Value in Dropdown.Values do
                 local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
