@@ -146,45 +146,6 @@ to `true`.
   active sub tab's sides when there is one, otherwise the active tab's. Prefer this over
   `Library.ActiveTab.Sides`, which is wrong whenever sub tabs are in use.
 
-## Split view
-
-Two tabs can be shown side by side in the content area, with a draggable divider between
-them.
-
-**Shift click a sidebar tab** to split it against the tab already open. Clicking any tab
-normally leaves the split and shows just that tab. Dragging the divider changes the ratio;
-neither pane can be squeezed below `SplitViewMinPaneWidth`.
-
-```lua
-Library:CreateWindow({
-    SplitView = true,             -- default true, disables the shift click when false
-    SplitViewMinPaneWidth = 180,
-})
-
-Window:SetSplitView(TabA, TabB)   -- TabA on the left
-Window:ClearSplitView()
-Window:ToggleSplitView(TabB)      -- splits with the open tab, or clears if already split
-Window:IsSplitView()
-Window:GetSplitView()             -- primary, secondary
-Window:SetSplitRatio(0.35)
-Window:GetSplitRatio()
-```
-
-The important asymmetry: **the left pane is the ordinary active tab and the right pane is
-not.** The left one goes through `Tab:Show`, so `Library.ActiveTab`, search,
-`Library:GetActiveSides()` and sub tab switching all keep pointing at it. The right pane is
-driven directly, because `Show` and `Hide` are built around exactly one tab being visible.
-In practice that means **searching filters the left pane only**, and both sidebar buttons
-are lit but only the left one is "active" as far as the rest of the library is concerned.
-
-Both tabs get `Tab.SplitPane = true` while split. Hiding or destroying either one leaves
-the split first, so a pane can never outlive its tab. Key tabs cannot be split.
-
-Each pane keeps its own two columns, so a split pane is half as wide as usual — tabs with
-a lot in them will be tight. The divider, the panes and the exit all animate with the tab
-transition settings; turn that off with `Animations = { SplitView = false }`, which like
-the other sub tab flags defaults to `true`.
-
 ## Header
 
 The header was reworked and differs from upstream in ways that affect script authors:
