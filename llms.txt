@@ -71,6 +71,10 @@ itself** switches to it and opens its list. Only one list is open at a time: ope
 collapses the previously open one. Selecting a nested row switches to that tab first if it
 was not already open, then to the sub tab.
 
+Every row reserves the same icon column whether or not it has an icon, so all the labels
+line up. Without that, an iconless row sat further left than its siblings and read as a
+level shallower in the tree.
+
 The open sub tab's row is marked with an accent bar, an accent label, and a faint fill;
 idle rows are label only at 40% transparency, and hover sits between the two. The list
 animates open and closed, and the chevron rotates with it. Disable both with

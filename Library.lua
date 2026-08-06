@@ -2049,6 +2049,8 @@ local SUBTAB_HOVER_SCALE = 0.94
 local SUBTAB_HOVER_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 --// Left inset of a sub tab row nested in the sidebar, lining it up under the tab label
 local SUBTAB_SIDEBAR_INDENT = 30
+--// Reserved for the row's icon, kept even when it has none so labels stay aligned
+local SUBTAB_SIDEBAR_ICON_COLUMN = 20
 
 --// Expanded dropdown panel open and close
 local DROPDOWN_EXPAND_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -12122,7 +12124,11 @@ function Library:CreateWindow(WindowInfo)
                 })
             )
 
-            local TextOffset = SUBTAB_SIDEBAR_INDENT
+            --// The icon column is reserved whether or not this row has one, so every
+            --// label starts at the same x. Indenting only the iconless rows made them
+            --// read as a level shallower than their siblings.
+            local TextOffset = SUBTAB_SIDEBAR_INDENT + SUBTAB_SIDEBAR_ICON_COLUMN
+
             local EntryIcon
             if SubIcon then
                 EntryIcon = New("ImageLabel", {
@@ -12133,13 +12139,11 @@ function Library:CreateWindow(WindowInfo)
                     ImageRectOffset = SubIcon.ImageRectOffset,
                     ImageRectSize = SubIcon.ImageRectSize,
                     ImageTransparency = SUBTAB_IDLE_TRANSPARENCY,
-                    Position = UDim2.new(0, TextOffset, 0.5, 0),
+                    Position = UDim2.new(0, SUBTAB_SIDEBAR_INDENT, 0.5, 0),
                     ScaleType = Enum.ScaleType.Fit,
                     Size = UDim2.fromOffset(14, 14),
                     Parent = Entry,
                 })
-
-                TextOffset += 20
             end
 
             local EntryLabel = New("TextLabel", {
