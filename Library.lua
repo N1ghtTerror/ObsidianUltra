@@ -12240,9 +12240,6 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, -4, 0, SUBTAB_BAR_HEIGHT),
                 Position = UDim2.fromOffset(2, 0),
-                --// Built but never shown: the sub tab buttons and the underline hang
-                --// off it, while the sidebar list is what the user actually sees
-                Visible = false,
                 ZIndex = 2,
                 Parent = TabContainer,
             })

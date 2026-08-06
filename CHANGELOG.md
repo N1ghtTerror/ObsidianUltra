@@ -16,8 +16,8 @@
 + Library.FuzzySearch, Library.SearchValues, WindowInfo.FuzzySearch, WindowInfo.SearchValues, WindowInfo.SearchKeybind, WindowInfo.DisableSearchKeybind
 + Minimize the window to a card with title, subtitle, labels and footer; button sits beside the move icon
 + The card is built into the window and needs no setup: its subtitle tracks the open tab and its footer mirrors the window footer
-+ Sub tabs are now one feature: giving a tab sub tabs nests them under it in the sidebar as a collapsible list, with a chevron to expand and collapse
-+ The old top button row is built but never shown and reserves no vertical space; SetSubTabAlignment and SubTab.Button are legacy
++ Sub tabs are now one feature with two views shown at once: the button row above the groupboxes and a collapsible list nested under the tab in the sidebar
++ Both are painted from the same SubTab:Show/Hide, so switching in either drives the other
 + Tab:SetExpanded/ToggleExpanded/IsExpanded, Animations.SidebarSubTabs
 + Window:SetMinimized/ToggleMinimized/IsMinimized, SetMinimizedSubtitle, AddMinimizedLabel, ClearMinimizedLabels
 + WindowInfo.Minimizable, MinimizeKeybind, MinimizedWidth, MinimizedSubtitle
