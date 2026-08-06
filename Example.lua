@@ -58,6 +58,11 @@ local Window = Library:CreateWindow({
 	Minimizable = true,
 	MinimizeKeybind = Enum.KeyCode.RightBracket,
 	MinimizedWidth = 300,
+
+	-- Sub tabs are listed under their tab in the sidebar as a collapsible tree,
+	-- instead of the button row across the top of the content area.
+	-- KeepSubTabBar = true shows both.
+	SidebarSubTabs = true,
 })
 
 -- CALLBACK NOTE:

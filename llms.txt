@@ -83,6 +83,43 @@ when the bar is resized. Disable the slide with
 `Animations = { SubTabUnderline = false }` — unlike the other animation flags it defaults
 to `true`.
 
+### Nesting them in the sidebar
+
+By default sub tabs render as the button row described above. Turn on `SidebarSubTabs` and
+they are listed **under their tab in the sidebar** instead, as a collapsible tree:
+
+```lua
+Library:CreateWindow({
+    SidebarSubTabs = true,
+    KeepSubTabBar = false,  -- true shows the top row as well
+})
+```
+
+A tab that has sub tabs grows a chevron on the right of its sidebar button. Clicking the
+**chevron** expands or collapses the list without switching tabs; clicking the **tab
+itself** switches to it and opens its list. Only one list is open at a time: opening a tab
+collapses the previously open one. Selecting a nested row switches to that tab first if it
+was not already open, then to the sub tab.
+
+The open sub tab's row is marked with an accent bar, an accent label, and a faint fill. The
+list animates open and closed; disable that with `Animations = { SidebarSubTabs = false }`,
+which like `SubTabUnderline` defaults to `true`.
+
+With `SidebarSubTabs` on, the top button row is hidden and stops reserving vertical space,
+so groupboxes start higher up the tab. It is still built underneath, which is why
+`Tab:SetSubTabAlignment` and the underline keep working if you turn `KeepSubTabBar` on.
+
+A compacted sidebar has no room for labels, so nested lists collapse while compact and the
+open tab's list reopens when the sidebar expands again.
+
+Per-tab control:
+
+```lua
+Tab:SetExpanded(true)
+Tab:ToggleExpanded()
+Tab:IsExpanded()
+```
+
 ### Behaviour worth knowing
 
 - **The parent tab becomes a host.** The moment a tab gets its first sub tab, that tab's

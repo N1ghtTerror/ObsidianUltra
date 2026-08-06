@@ -386,6 +386,9 @@ local Templates = {
         MinimizedWidth = 300,
         MinimizedSubtitle = "",
 
+        SidebarSubTabs = false,
+        KeepSubTabBar = false,
+
         CornerRadius = 4,
         NotifySide = "Right",
         ShowCustomCursor = true,
@@ -2047,6 +2050,8 @@ local SUBTAB_SHADOW_TRANSPARENCY = { 0.55, 0.75 }
 --// never reflows, and the underline stays put
 local SUBTAB_HOVER_SCALE = 0.94
 local SUBTAB_HOVER_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+--// Left inset of a sub tab row nested in the sidebar, lining it up under the tab label
+local SUBTAB_SIDEBAR_INDENT = 30
 
 --// Expanded dropdown panel open and close
 local DROPDOWN_EXPAND_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -10738,6 +10743,20 @@ function Library:CreateWindow(WindowInfo)
             Button.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
             Button.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
             Button.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+
+            --// Nested sub tabs are labels, so a compact sidebar has nowhere to put them
+            if Button.Chevron then
+                Button.Chevron.Visible = not IsCompact
+            end
+            if Button.SidebarList and IsCompact then
+                Button.SidebarList.Size = UDim2.new(1, 0, 0, 0)
+                Button.SidebarList.Visible = false
+            end
+        end
+
+        --// Re-open the active tab's list once the sidebar has room again
+        if not IsCompact and Library.ActiveTab and Library.ActiveTab.SetExpanded then
+            Library.ActiveTab:SetExpanded(true)
         end
     end
 
@@ -10930,14 +10949,36 @@ function Library:CreateWindow(WindowInfo)
         local TabLeft
         local TabRight
 
+        --// Sidebar sub tabs: the button and its nested list share a holder so the
+        --// list can sit directly under the tab it belongs to
+        local TabHolder
+        local TabChevron
+        local TabButtonInfo
+        local SidebarList
+        local SidebarListLayout
+        local SidebarEntries = {}
+        local Expanded = false
+
         Icon = Library:GetCustomIcon(Icon)
         do
+            TabHolder = New("Frame", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Parent = Tabs,
+            })
+            New("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = TabHolder,
+            })
+
             TabButton = New("TextButton", {
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
+                LayoutOrder = 0,
                 Size = UDim2.new(1, 0, 0, 40),
                 Text = "",
-                Parent = Tabs,
+                Parent = TabHolder,
             })
             local ButtonPadding = New("UIPadding", {
                 PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
@@ -10973,11 +11014,12 @@ function Library:CreateWindow(WindowInfo)
                 })
             end
 
-            table.insert(Library.TabButtons, {
+            TabButtonInfo = {
                 Label = TabLabel,
                 Padding = ButtonPadding,
                 Icon = TabIcon,
-            })
+            }
+            table.insert(Library.TabButtons, TabButtonInfo)
 
             --// Tab Canvas \\--
             TabCanvas = New("CanvasGroup", {
@@ -11920,6 +11962,270 @@ function Library:CreateWindow(WindowInfo)
             return self:AddGroupbox({ Side = 2, Name = Name, IconName = IconName, Visible = Visible, Collapsed = Collapsed, DisableCollapsing = DisableCollapsing })
         end
 
+        --// Sidebar sub tabs \\--
+        --// When SidebarSubTabs is on, a tab's sub tabs are listed under it in the
+        --// sidebar and the top row is hidden unless KeepSubTabBar asks for both.
+        local UseSidebarSubTabs = WindowInfo.SidebarSubTabs == true
+        local ShowSubTabBar = not UseSidebarSubTabs or WindowInfo.KeepSubTabBar == true
+
+        local function SidebarListHeight(): number
+            return SidebarListLayout and SidebarListLayout.AbsoluteContentSize.Y or 0
+        end
+
+        local function ResizeSidebarList(Animate: boolean?)
+            if not SidebarList then
+                return
+            end
+
+            --// Collapsed while the sidebar is compact: there is no room for labels
+            local Open = Expanded and not IsCompact
+            local Target = Open and SidebarListHeight() or 0
+
+            SidebarList.Visible = Target > 0
+
+            if Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false then
+                TweenService:Create(SidebarList, Library.GroupboxTweenInfo, {
+                    Size = UDim2.new(1, 0, 0, Target),
+                }):Play()
+            else
+                SidebarList.Size = UDim2.new(1, 0, 0, Target)
+            end
+
+            if TabChevron then
+                local Rotation = Open and 180 or 0
+
+                if Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false then
+                    TweenService:Create(TabChevron, Library.RotatingChevronTweenInfo, {
+                        Rotation = Rotation,
+                    }):Play()
+                else
+                    TabChevron.Rotation = Rotation
+                end
+            end
+        end
+
+        --// Built on the first AddSubTab, so tabs without sub tabs stay untouched
+        local function EnsureSidebarList()
+            if SidebarList or not UseSidebarSubTabs then
+                return
+            end
+
+            SidebarList = New("Frame", {
+                BackgroundTransparency = 1,
+                ClipsDescendants = true,
+                LayoutOrder = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Visible = false,
+                Parent = TabHolder,
+            })
+            SidebarListLayout = New("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = SidebarList,
+            })
+
+            --// Chevron doubles as a hit target, so it can expand without switching tabs
+            local ChevronIcon = Library:GetIcon("chevron-down")
+            TabChevron = New("ImageButton", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundTransparency = 1,
+                Image = ChevronIcon and ChevronIcon.Url or "",
+                ImageColor3 = "FontColor",
+                ImageRectOffset = ChevronIcon and ChevronIcon.ImageRectOffset or Vector2.zero,
+                ImageRectSize = ChevronIcon and ChevronIcon.ImageRectSize or Vector2.zero,
+                ImageTransparency = 0.5,
+                Position = UDim2.new(1, 0, 0.5, 0),
+                Size = UDim2.fromOffset(16, 16),
+                Visible = not IsCompact,
+                ZIndex = 3,
+                Parent = TabButton,
+            })
+
+            --// Give the chevron room so a long tab name cannot run under it
+            TabLabel.Size = UDim2.new(1, -30 - 18, 1, 0)
+
+            TabChevron.MouseButton1Click:Connect(function()
+                Tab:SetExpanded(not Expanded)
+            end)
+
+            if TabButtonInfo then
+                TabButtonInfo.Chevron = TabChevron
+                TabButtonInfo.SidebarList = SidebarList
+            end
+
+            --// The first tab is shown before it has any sub tabs, so if this is the
+            --// open tab the list is born expanded rather than waiting for a switch
+            if Library.ActiveTab == Tab then
+                Expanded = true
+            end
+
+            --// The list height follows its contents while open
+            Library:GiveSignal(SidebarListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                if Expanded then
+                    ResizeSidebarList(false)
+                end
+            end))
+        end
+
+        --// One row in the sidebar list, mirroring a sub tab
+        local function CreateSidebarEntry(SubTab, SubName: string, SubIcon)
+            EnsureSidebarList()
+
+            if not SidebarList then
+                return nil
+            end
+
+            local Entry = New("TextButton", {
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 1,
+                LayoutOrder = #SidebarEntries,
+                Size = UDim2.new(1, 0, 0, 30),
+                Text = "",
+                Parent = SidebarList,
+            })
+
+            --// Accent bar marking the open sub tab
+            local Marker = New("Frame", {
+                AnchorPoint = Vector2.new(0, 0.5),
+                BackgroundColor3 = "AccentColor",
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 14, 0.5, 0),
+                Size = UDim2.fromOffset(2, 16),
+                Parent = Entry,
+            })
+            table.insert(
+                Library.PillCorners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = Marker,
+                })
+            )
+
+            local TextOffset = SUBTAB_SIDEBAR_INDENT
+            local EntryIcon
+            if SubIcon then
+                EntryIcon = New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    BackgroundTransparency = 1,
+                    Image = SubIcon.Url,
+                    ImageColor3 = SubIcon.Custom and "WhiteColor" or "FontColor",
+                    ImageRectOffset = SubIcon.ImageRectOffset,
+                    ImageRectSize = SubIcon.ImageRectSize,
+                    ImageTransparency = SUBTAB_IDLE_TRANSPARENCY,
+                    Position = UDim2.new(0, TextOffset, 0.5, 0),
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromOffset(14, 14),
+                    Parent = Entry,
+                })
+
+                TextOffset += 20
+            end
+
+            local EntryLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(TextOffset, 0),
+                Size = UDim2.new(1, -TextOffset - 10, 1, 0),
+                Text = SubName,
+                TextSize = 14,
+                TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Entry,
+            })
+
+            local Handle = {
+                Button = Entry,
+                Label = EntryLabel,
+                Active = false,
+            }
+
+            function Handle:SetActive(Value: boolean)
+                Handle.Active = Value and true or false
+
+                --// Registry keeps the colour right across theme changes
+                Library:AddToRegistry(EntryLabel, { TextColor3 = Handle.Active and "AccentColor" or "FontColor" })
+                EntryLabel.TextColor3 = Handle.Active and Library.Scheme.AccentColor or Library.Scheme.FontColor
+
+                TweenService:Create(Entry, Library.TweenInfo, {
+                    BackgroundTransparency = Handle.Active and 0.5 or 1,
+                }):Play()
+                TweenService:Create(Marker, Library.TweenInfo, {
+                    BackgroundTransparency = Handle.Active and 0 or 1,
+                }):Play()
+                TweenService:Create(EntryLabel, Library.TweenInfo, {
+                    TextTransparency = Handle.Active and 0 or SUBTAB_IDLE_TRANSPARENCY,
+                }):Play()
+
+                if EntryIcon then
+                    TweenService:Create(EntryIcon, Library.TweenInfo, {
+                        ImageTransparency = Handle.Active and 0 or SUBTAB_IDLE_TRANSPARENCY,
+                    }):Play()
+                end
+            end
+
+            function Handle:SetVisible(Value: boolean)
+                Entry.Visible = Value and true or false
+                ResizeSidebarList(false)
+            end
+
+            function Handle:Destroy()
+                local Index = table.find(SidebarEntries, Handle)
+                if Index then
+                    table.remove(SidebarEntries, Index)
+                end
+
+                Entry:Destroy()
+                ResizeSidebarList(false)
+            end
+
+            Entry.MouseEnter:Connect(function()
+                if Handle.Active then
+                    return
+                end
+
+                TweenService:Create(EntryLabel, Library.TweenInfo, { TextTransparency = 0.2 }):Play()
+            end)
+            Entry.MouseLeave:Connect(function()
+                if Handle.Active then
+                    return
+                end
+
+                TweenService:Create(EntryLabel, Library.TweenInfo, {
+                    TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
+                }):Play()
+            end)
+
+            Entry.MouseButton1Click:Connect(function()
+                --// Selecting a sub tab implies opening the tab that owns it
+                if Library.ActiveTab ~= Tab then
+                    Tab:Show()
+                end
+
+                SubTab:Show()
+            end)
+
+            table.insert(SidebarEntries, Handle)
+            ResizeSidebarList(false)
+
+            return Handle
+        end
+
+        function Tab:IsExpanded(): boolean
+            return Expanded
+        end
+
+        function Tab:SetExpanded(Value: boolean?)
+            if Value == nil then
+                Value = not Expanded
+            end
+            Expanded = Value and true or false
+
+            ResizeSidebarList(true)
+        end
+
+        function Tab:ToggleExpanded()
+            Tab:SetExpanded(not Expanded)
+        end
+
         --// Sub Tabs \\--
         local SubTabBar
         local SubTabButtons
@@ -11939,6 +12245,9 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, -4, 0, SUBTAB_BAR_HEIGHT),
                 Position = UDim2.fromOffset(2, 0),
+                --// Still built when nested in the sidebar: the underline and the
+                --// existing button state machine hang off it
+                Visible = ShowSubTabBar,
                 ZIndex = 2,
                 Parent = TabContainer,
             })
@@ -12078,7 +12387,7 @@ function Library:CreateWindow(WindowInfo)
 
         function Tab:GetContentOffset()
             local Offset = WarningBoxHolder.Visible and WarningBox.Size.Y.Offset + 8 or 0
-            if SubTabBar then
+            if SubTabBar and SubTabBar.Visible then
                 SubTabBar.Position = UDim2.new(0, 2, 0, Offset)
                 Offset += SUBTAB_BAR_HEIGHT + 6
             end
@@ -12379,6 +12688,10 @@ function Library:CreateWindow(WindowInfo)
                         ImageTransparency = 0,
                     }):Play()
                 end
+                if SubTab.SidebarEntry then
+                    SubTab.SidebarEntry:SetActive(true)
+                end
+
                 --// Set before moving the bar: a deferred move re-checks it
                 Tab.ActiveSubTab = SubTab
                 MoveSubTabUnderline(Button)
@@ -12415,6 +12728,10 @@ function Library:CreateWindow(WindowInfo)
                     }):Play()
                 end
 
+                if SubTab.SidebarEntry then
+                    SubTab.SidebarEntry:SetActive(false)
+                end
+
                 Library:PlayTabAnimation(SubCanvas, false)
 
                 if Tab.ActiveSubTab == SubTab then
@@ -12424,6 +12741,10 @@ function Library:CreateWindow(WindowInfo)
 
             function SubTab:SetVisible(Visible: boolean)
                 Button.Visible = Visible
+
+                if SubTab.SidebarEntry then
+                    SubTab.SidebarEntry:SetVisible(Visible)
+                end
 
                 --// Hiding a hovered button never fires MouseLeave
                 if not Visible then
@@ -12450,6 +12771,11 @@ function Library:CreateWindow(WindowInfo)
 
             function SubTab:Destroy()
                 SubTab.Destroyed = true
+
+                if SubTab.SidebarEntry then
+                    SubTab.SidebarEntry:Destroy()
+                    SubTab.SidebarEntry = nil
+                end
 
                 for _, Connection in SubTab.Connections do
                     Connection:Disconnect()
@@ -12503,6 +12829,9 @@ function Library:CreateWindow(WindowInfo)
 
             Tab.SubTabs[SubName] = SubTab
 
+            --// Mirror row in the sidebar, when the window asked for nested sub tabs
+            SubTab.SidebarEntry = CreateSidebarEntry(SubTab, SubName, SubIcon)
+
             if not Tab.ActiveSubTab then
                 SubTab:Show()
             else
@@ -12551,6 +12880,11 @@ function Library:CreateWindow(WindowInfo)
             --// The header always names the open tab; the description is optional
             Window:ShowTabInfo(Name, Description)
 
+            --// Opening a tab opens its list, so the sidebar shows one tab's sub tabs
+            if SidebarList then
+                Tab:SetExpanded(true)
+            end
+
             Library:PlayTabAnimation(TabCanvas, true)
             Tab:RefreshSides()
 
@@ -12576,6 +12910,11 @@ function Library:CreateWindow(WindowInfo)
                 }):Play()
             end
 
+            --// Collapse on the way out so only the open tab's sub tabs are listed
+            if SidebarList then
+                Tab:SetExpanded(false)
+            end
+
             Library:PlayTabAnimation(TabCanvas, false)
             Window:HideTabInfo()
 
@@ -12583,6 +12922,8 @@ function Library:CreateWindow(WindowInfo)
         end
 
         function Tab:SetVisible(Visible: boolean)
+            --// The holder carries the nested list, so hide that rather than the button
+            TabHolder.Visible = Visible
             TabButton.Visible = Visible
 
             if not Visible and Library.ActiveTab == Tab then
@@ -12641,6 +12982,11 @@ function Library:CreateWindow(WindowInfo)
                 end
                 
                 TabButton:Destroy()
+            end
+
+            --// Takes the nested sub tab list with it
+            if TabHolder then
+                TabHolder:Destroy()
             end
             
             Library.Tabs[Name] = nil
