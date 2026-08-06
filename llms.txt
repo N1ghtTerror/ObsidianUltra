@@ -101,21 +101,9 @@ itself** switches to it and opens its list. Only one list is open at a time: ope
 collapses the previously open one. Selecting a nested row switches to that tab first if it
 was not already open, then to the sub tab.
 
-Nested rows are drawn as the **same chip as the top row**: the two offset shadow layers, the
-fill lighter than `MainColor`, the thin outline, the accent label, and the hover squash all
-behave identically, including hovering the row you are already on. The row is full width, so
-the icon and label are left aligned rather than centred.
-
-The bar carries over too, stood on its end. Where the top row underlines the open chip, the
-list marks its open row with a **rail down the left**: a full width row has no short text
-edge for an underline to sit under. It is still **one** bar shared by the list, not one per
-row, with the same gradient turned upright so it tapers top to bottom. It slides between
-rows as the sub tab changes, snaps on the first show, and follows the rows when the list
-resizes. `Animations = { SubTabUnderline = false }` makes it snap in both the top row and
-the sidebar.
-
-The list itself animates open and closed; disable that with
-`Animations = { SidebarSubTabs = false }`, which like `SubTabUnderline` defaults to `true`.
+The open sub tab's row is marked with an accent bar, an accent label, and a faint fill. The
+list animates open and closed; disable that with `Animations = { SidebarSubTabs = false }`,
+which like `SubTabUnderline` defaults to `true`.
 
 With `SidebarSubTabs` on, the top button row is hidden and stops reserving vertical space,
 so groupboxes start higher up the tab. It is still built underneath, which is why
