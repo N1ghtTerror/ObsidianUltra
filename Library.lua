@@ -10953,6 +10953,7 @@ function Library:CreateWindow(WindowInfo)
         local TabButtonInfo
         local SidebarList
         local SidebarListLayout
+        local SidebarListTween
         local SidebarEntries = {}
         local Expanded = false
 
@@ -11975,21 +11976,47 @@ function Library:CreateWindow(WindowInfo)
             --// Collapsed while the sidebar is compact: there is no room for labels
             local Open = Expanded and not IsCompact
             local Target = Open and SidebarListHeight() or 0
+            local Animated = Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false
 
-            SidebarList.Visible = Target > 0
+            --// A toggle mid animation would otherwise leave two tweens fighting
+            if SidebarListTween then
+                StopTween(SidebarListTween, true)
+                SidebarListTween = nil
+            end
 
-            if Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false then
-                TweenService:Create(SidebarList, Library.GroupboxTweenInfo, {
+            --// Stays visible for the whole collapse: hiding it up front would play the
+            --// tween on a frame nobody can see, which reads as the list snapping shut
+            if Target > 0 then
+                SidebarList.Visible = true
+            end
+
+            if Animated then
+                SidebarListTween = TweenService:Create(SidebarList, Library.GroupboxTweenInfo, {
                     Size = UDim2.new(1, 0, 0, Target),
-                }):Play()
+                })
+
+                if Target == 0 then
+                    local Connection
+                    Connection = SidebarListTween.Completed:Connect(function(State: Enum.PlaybackState)
+                        Connection:Disconnect()
+
+                        --// Cancelled means something re-opened it on the way down
+                        if State == Enum.PlaybackState.Completed and SidebarList.Size.Y.Offset == 0 then
+                            SidebarList.Visible = false
+                        end
+                    end)
+                end
+
+                SidebarListTween:Play()
             else
                 SidebarList.Size = UDim2.new(1, 0, 0, Target)
+                SidebarList.Visible = Target > 0
             end
 
             if TabChevron then
                 local Rotation = Open and 180 or 0
 
-                if Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false then
+                if Animated then
                     TweenService:Create(TabChevron, Library.RotatingChevronTweenInfo, {
                         Rotation = Rotation,
                     }):Play()
