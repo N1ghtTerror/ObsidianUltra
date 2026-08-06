@@ -12015,7 +12015,7 @@ function Library:CreateWindow(WindowInfo)
 
             --// The rows move with the list, so the bar has to follow them
             if Open and Tab.ActiveSubTab and Tab.ActiveSubTab.SidebarEntry then
-                MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry.Visual)
+                MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry)
             elseif SidebarUnderline then
                 SidebarUnderline.Visible = false
             end
@@ -12122,22 +12122,25 @@ function Library:CreateWindow(WindowInfo)
             --// Rows shift when the sidebar is resized, so follow them
             Library:GiveSignal(SidebarList:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
                 if Expanded and Tab.ActiveSubTab and Tab.ActiveSubTab.SidebarEntry then
-                    MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry.Visual)
+                    MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry)
                 end
             end))
         end
 
-        --// Slides the shared bar under Visual; snaps when nothing was active yet
-        function MoveSidebarUnderline(Visual: GuiObject?)
-            if not (SidebarUnderline and Visual) then
+        --// Slides the shared bar under Entry's label; snaps when nothing was active yet
+        function MoveSidebarUnderline(Entry)
+            if not (SidebarUnderline and Entry) then
                 return
             end
+
+            local Visual = Entry.Visual
+            local Label = Entry.Label
 
             --// A row added this frame has not been laid out yet
             if Visual.AbsoluteSize.X == 0 then
                 task.defer(function()
-                    if Tab.ActiveSubTab and Tab.ActiveSubTab.SidebarEntry then
-                        MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry.Visual)
+                    if Tab.ActiveSubTab then
+                        MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry)
                     end
                 end)
 
@@ -12145,18 +12148,17 @@ function Library:CreateWindow(WindowInfo)
             end
 
             local Scale = Library.DPIScale
-            local OffsetX = (Visual.AbsolutePosition.X - SidebarList.AbsolutePosition.X) / Scale
-            local Width = Visual.AbsoluteSize.X / Scale
             local Bottom = (Visual.AbsolutePosition.Y + Visual.AbsoluteSize.Y - SidebarList.AbsolutePosition.Y) / Scale
 
-            --// Inset to a fraction of the chip, centered under the text
-            local LineWidth = math.floor(Width * SUBTAB_UNDERLINE_WIDTH)
+            --// Unlike the top row, a sidebar chip is full width and its text is left
+            --// aligned, so centring on the chip would strand the bar to the right of
+            --// the word. Track the label instead, and span the text rather than the chip.
+            local OffsetX = (Label.AbsolutePosition.X - SidebarList.AbsolutePosition.X) / Scale
+            local LabelWidth = Label.AbsoluteSize.X / Scale
+            local LineWidth = math.floor(math.min(Entry.TextWidth + 6, LabelWidth))
 
             local Target = {
-                Position = UDim2.fromOffset(
-                    math.floor(OffsetX + (Width - LineWidth) / 2),
-                    Bottom - SUBTAB_UNDERLINE_GAP
-                ),
+                Position = UDim2.fromOffset(math.floor(OffsetX - 3), Bottom - SUBTAB_UNDERLINE_GAP),
                 Size = UDim2.fromOffset(LineWidth, 1),
             }
 
@@ -12312,6 +12314,8 @@ function Library:CreateWindow(WindowInfo)
                 Button = Entry,
                 Visual = ButtonVisual,
                 Label = ButtonLabel,
+                --// Measured, because the label is full width and the text is not
+                TextWidth = math.ceil(Library:GetTextBounds(SubName, Library.Scheme.Font, 15)),
                 Active = false,
             }
 
@@ -12343,7 +12347,7 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 if Handle.Active then
-                    MoveSidebarUnderline(ButtonVisual)
+                    MoveSidebarUnderline(Handle)
                 end
             end
 
