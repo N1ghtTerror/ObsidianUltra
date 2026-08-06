@@ -17,6 +17,7 @@
 + Minimize the window to a card with title, subtitle, labels and footer; button sits beside the move icon
 + The card is built into the window and needs no setup: its subtitle tracks the open tab and its footer mirrors the window footer
 + Collapsible sidebar tabs: WindowInfo.SidebarSubTabs lists a tab's sub tabs under it in the sidebar, with a chevron to expand and collapse
++ Nested rows reuse the top row's chip exactly: shadow layers, outline, hover squash, and a shared sliding underline
 + Tab:SetExpanded/ToggleExpanded/IsExpanded, WindowInfo.KeepSubTabBar, Animations.SidebarSubTabs
 + Window:SetMinimized/ToggleMinimized/IsMinimized, SetMinimizedSubtitle, AddMinimizedLabel, ClearMinimizedLabels
 + WindowInfo.Minimizable, MinimizeKeybind, MinimizedWidth, MinimizedSubtitle

@@ -11968,6 +11968,14 @@ function Library:CreateWindow(WindowInfo)
         local UseSidebarSubTabs = WindowInfo.SidebarSubTabs == true
         local ShowSubTabBar = not UseSidebarSubTabs or WindowInfo.KeepSubTabBar == true
 
+        --// Nested rows reuse the top row's chip: shadow layers, a lighter fill, a
+        --// stroke, a hover squash, and one shared underline that slides between them.
+        local SidebarButtons
+        local SidebarUnderline
+        local SidebarUnderlineTween
+        --// Declared here so ResizeSidebarList below can reach it
+        local MoveSidebarUnderline
+
         local function SidebarListHeight(): number
             return SidebarListLayout and SidebarListLayout.AbsoluteContentSize.Y or 0
         end
@@ -11983,7 +11991,9 @@ function Library:CreateWindow(WindowInfo)
 
             SidebarList.Visible = Target > 0
 
-            if Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false then
+            local Animated = Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false
+
+            if Animated then
                 TweenService:Create(SidebarList, Library.GroupboxTweenInfo, {
                     Size = UDim2.new(1, 0, 0, Target),
                 }):Play()
@@ -11994,13 +12004,20 @@ function Library:CreateWindow(WindowInfo)
             if TabChevron then
                 local Rotation = Open and 180 or 0
 
-                if Animate and Library.Animations and Library.Animations.SidebarSubTabs ~= false then
+                if Animated then
                     TweenService:Create(TabChevron, Library.RotatingChevronTweenInfo, {
                         Rotation = Rotation,
                     }):Play()
                 else
                     TabChevron.Rotation = Rotation
                 end
+            end
+
+            --// The rows move with the list, so the bar has to follow them
+            if Open and Tab.ActiveSubTab and Tab.ActiveSubTab.SidebarEntry then
+                MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry.Visual)
+            elseif SidebarUnderline then
+                SidebarUnderline.Visible = false
             end
         end
 
@@ -12018,9 +12035,46 @@ function Library:CreateWindow(WindowInfo)
                 Visible = false,
                 Parent = TabHolder,
             })
+
+            --// Rows get their own frame: a UIListLayout lays out every child, so the
+            --// underline cannot sit alongside them without being laid out too
+            SidebarButtons = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Parent = SidebarList,
+            })
             SidebarListLayout = New("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = SidebarButtons,
+            })
+
+            --// Same gradient bar as the top row, sliding vertically instead
+            SidebarUnderline = New("Frame", {
+                AnchorPoint = Vector2.new(0, 1),
+                BackgroundColor3 = "AccentColor",
+                BorderSizePixel = 0,
+                Position = UDim2.new(0, 0, 0, 0),
+                Size = UDim2.fromOffset(0, 1),
+                Visible = false,
+                ZIndex = 4,
                 Parent = SidebarList,
+            })
+            New("UIGradient", {
+                Color = function()
+                    return ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, Library.Scheme.FontColor),
+                        ColorSequenceKeypoint.new(0.5, Library.Scheme.AccentColor),
+                        ColorSequenceKeypoint.new(1, Library.Scheme.FontColor),
+                    })
+                end,
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(0.2, 0.85),
+                    NumberSequenceKeypoint.new(0.5, 0.1),
+                    NumberSequenceKeypoint.new(0.8, 0.85),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = SidebarUnderline,
             })
 
             --// Chevron doubles as a hit target, so it can expand without switching tabs
@@ -12064,9 +12118,74 @@ function Library:CreateWindow(WindowInfo)
                     ResizeSidebarList(false)
                 end
             end))
+
+            --// Rows shift when the sidebar is resized, so follow them
+            Library:GiveSignal(SidebarList:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                if Expanded and Tab.ActiveSubTab and Tab.ActiveSubTab.SidebarEntry then
+                    MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry.Visual)
+                end
+            end))
         end
 
-        --// One row in the sidebar list, mirroring a sub tab
+        --// Slides the shared bar under Visual; snaps when nothing was active yet
+        function MoveSidebarUnderline(Visual: GuiObject?)
+            if not (SidebarUnderline and Visual) then
+                return
+            end
+
+            --// A row added this frame has not been laid out yet
+            if Visual.AbsoluteSize.X == 0 then
+                task.defer(function()
+                    if Tab.ActiveSubTab and Tab.ActiveSubTab.SidebarEntry then
+                        MoveSidebarUnderline(Tab.ActiveSubTab.SidebarEntry.Visual)
+                    end
+                end)
+
+                return
+            end
+
+            local Scale = Library.DPIScale
+            local OffsetX = (Visual.AbsolutePosition.X - SidebarList.AbsolutePosition.X) / Scale
+            local Width = Visual.AbsoluteSize.X / Scale
+            local Bottom = (Visual.AbsolutePosition.Y + Visual.AbsoluteSize.Y - SidebarList.AbsolutePosition.Y) / Scale
+
+            --// Inset to a fraction of the chip, centered under the text
+            local LineWidth = math.floor(Width * SUBTAB_UNDERLINE_WIDTH)
+
+            local Target = {
+                Position = UDim2.fromOffset(
+                    math.floor(OffsetX + (Width - LineWidth) / 2),
+                    Bottom - SUBTAB_UNDERLINE_GAP
+                ),
+                Size = UDim2.fromOffset(LineWidth, 1),
+            }
+
+            if SidebarUnderlineTween then
+                StopTween(SidebarUnderlineTween, true)
+                SidebarUnderlineTween = nil
+            end
+
+            --// Nothing to slide from on the first show
+            if not SidebarUnderline.Visible then
+                SidebarUnderline.Position = Target.Position
+                SidebarUnderline.Size = Target.Size
+                SidebarUnderline.Visible = true
+
+                return
+            end
+
+            if Library.Animations and Library.Animations.SubTabUnderline == false then
+                SidebarUnderline.Position = Target.Position
+                SidebarUnderline.Size = Target.Size
+
+                return
+            end
+
+            SidebarUnderlineTween = TweenService:Create(SidebarUnderline, SUBTAB_SLIDE_TWEEN, Target)
+            SidebarUnderlineTween:Play()
+        end
+
+        --// One row in the sidebar list, drawn as the same chip as the top row
         local function CreateSidebarEntry(SubTab, SubName: string, SubIcon)
             EnsureSidebarList()
 
@@ -12074,67 +12193,125 @@ function Library:CreateWindow(WindowInfo)
                 return nil
             end
 
+            --// The button is only the hit target and the layout item; everything
+            --// visible sits in a holder so hover can scale it as one piece
             local Entry = New("TextButton", {
-                BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
                 LayoutOrder = #SidebarEntries,
-                Size = UDim2.new(1, 0, 0, 30),
+                Size = UDim2.new(1, 0, 0, SUBTAB_BAR_HEIGHT),
                 Text = "",
-                Parent = SidebarList,
+                Parent = SidebarButtons,
             })
 
-            --// Accent bar marking the open sub tab
-            local Marker = New("Frame", {
-                AnchorPoint = Vector2.new(0, 0.5),
-                BackgroundColor3 = "AccentColor",
+            local ButtonVisual = New("Frame", {
+                AnchorPoint = Vector2.new(0.5, 0.5),
                 BackgroundTransparency = 1,
-                Position = UDim2.new(0, 14, 0.5, 0),
-                Size = UDim2.fromOffset(2, 16),
+                Position = UDim2.new(0.5, SUBTAB_SIDEBAR_INDENT / 2, 0.5, 0),
+                Size = UDim2.new(1, -SUBTAB_SIDEBAR_INDENT - 10, 1, -6),
                 Parent = Entry,
             })
+            --// Deliberately not in Library.Scales: that is the DPI scale, which would
+            --// overwrite this every time SetDPIScale runs
+            local ButtonScale = New("UIScale", {
+                Scale = 1,
+                Parent = ButtonVisual,
+            })
+
+            --// Two offset layers read as a soft shadow without needing an image
+            local ButtonShadows = {}
+            for Index = 1, 2 do
+                local Shadow = New("Frame", {
+                    BackgroundColor3 = "DarkColor",
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(0, Index),
+                    Size = UDim2.fromScale(1, 1),
+                    ZIndex = 1,
+                    Parent = ButtonVisual,
+                })
+                table.insert(
+                    Library.Corners,
+                    New("UICorner", {
+                        CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                        Parent = Shadow,
+                    })
+                )
+
+                table.insert(ButtonShadows, Shadow)
+            end
+
+            local Chip = New("Frame", {
+                --// Lighter than MainColor so the active chip separates from the tab
+                BackgroundColor3 = function()
+                    return Library:GetBetterColor(Library.Scheme.MainColor, 10)
+                end,
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                ZIndex = 2,
+                Parent = ButtonVisual,
+            })
             table.insert(
-                Library.PillCorners,
+                Library.Corners,
                 New("UICorner", {
-                    CornerRadius = UDim.new(1, 0),
-                    Parent = Marker,
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = Chip,
                 })
             )
+            local ButtonStroke = New("UIStroke", {
+                Color = "OutlineColor",
+                Transparency = 1,
+                Parent = Chip,
+            })
 
-            local TextOffset = SUBTAB_SIDEBAR_INDENT
-            local EntryIcon
+            --// Icon and label flow inside their own frame, left aligned: a sidebar row
+            --// is full width, so centring the text would break the vertical rhythm
+            local ButtonContent = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Parent = Chip,
+            })
+            New("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Left,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 6),
+                Parent = ButtonContent,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 10),
+                PaddingRight = UDim.new(0, 8),
+                Parent = ButtonContent,
+            })
+
+            local ButtonIcon
             if SubIcon then
-                EntryIcon = New("ImageLabel", {
-                    AnchorPoint = Vector2.new(0, 0.5),
+                ButtonIcon = New("ImageLabel", {
                     BackgroundTransparency = 1,
                     Image = SubIcon.Url,
-                    ImageColor3 = SubIcon.Custom and "WhiteColor" or "FontColor",
+                    ImageColor3 = SubIcon.Custom and "WhiteColor" or "AccentColor",
                     ImageRectOffset = SubIcon.ImageRectOffset,
                     ImageRectSize = SubIcon.ImageRectSize,
                     ImageTransparency = SUBTAB_IDLE_TRANSPARENCY,
-                    Position = UDim2.new(0, TextOffset, 0.5, 0),
                     ScaleType = Enum.ScaleType.Fit,
-                    Size = UDim2.fromOffset(14, 14),
-                    Parent = Entry,
+                    Size = UDim2.fromOffset(SUBTAB_ICON_SIZE, SUBTAB_ICON_SIZE),
+                    Parent = ButtonContent,
                 })
-
-                TextOffset += 20
             end
 
-            local EntryLabel = New("TextLabel", {
+            local ButtonLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(TextOffset, 0),
-                Size = UDim2.new(1, -TextOffset - 10, 1, 0),
+                Size = UDim2.new(1, SubIcon and -(SUBTAB_ICON_SIZE + 6) or 0, 0, 16),
                 Text = SubName,
-                TextSize = 14,
+                TextSize = 15,
                 TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
                 TextTruncate = Enum.TextTruncate.AtEnd,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Entry,
+                Parent = ButtonContent,
             })
 
             local Handle = {
                 Button = Entry,
-                Label = EntryLabel,
+                Visual = ButtonVisual,
+                Label = ButtonLabel,
                 Active = false,
             }
 
@@ -12142,28 +12319,74 @@ function Library:CreateWindow(WindowInfo)
                 Handle.Active = Value and true or false
 
                 --// Registry keeps the colour right across theme changes
-                Library:AddToRegistry(EntryLabel, { TextColor3 = Handle.Active and "AccentColor" or "FontColor" })
-                EntryLabel.TextColor3 = Handle.Active and Library.Scheme.AccentColor or Library.Scheme.FontColor
+                Library:AddToRegistry(ButtonLabel, { TextColor3 = Handle.Active and "AccentColor" or "FontColor" })
+                ButtonLabel.TextColor3 = Handle.Active and Library.Scheme.AccentColor or Library.Scheme.FontColor
 
-                TweenService:Create(Entry, Library.TweenInfo, {
-                    BackgroundTransparency = Handle.Active and 0.5 or 1,
-                }):Play()
-                TweenService:Create(Marker, Library.TweenInfo, {
+                TweenService:Create(Chip, Library.TweenInfo, {
                     BackgroundTransparency = Handle.Active and 0 or 1,
                 }):Play()
-                TweenService:Create(EntryLabel, Library.TweenInfo, {
+                TweenService:Create(ButtonStroke, Library.TweenInfo, {
+                    Transparency = Handle.Active and 0.25 or 1,
+                }):Play()
+                for Index, Shadow in ButtonShadows do
+                    TweenService:Create(Shadow, Library.TweenInfo, {
+                        BackgroundTransparency = Handle.Active and SUBTAB_SHADOW_TRANSPARENCY[Index] or 1,
+                    }):Play()
+                end
+                TweenService:Create(ButtonLabel, Library.TweenInfo, {
                     TextTransparency = Handle.Active and 0 or SUBTAB_IDLE_TRANSPARENCY,
                 }):Play()
-
-                if EntryIcon then
-                    TweenService:Create(EntryIcon, Library.TweenInfo, {
+                if ButtonIcon then
+                    TweenService:Create(ButtonIcon, Library.TweenInfo, {
                         ImageTransparency = Handle.Active and 0 or SUBTAB_IDLE_TRANSPARENCY,
+                    }):Play()
+                end
+
+                if Handle.Active then
+                    MoveSidebarUnderline(ButtonVisual)
+                end
+            end
+
+            function Handle:Hover(Hovering: boolean)
+                --// The squash applies to the active chip too: hovering the one you are
+                --// already on should still respond
+                TweenService:Create(ButtonScale, SUBTAB_HOVER_TWEEN, {
+                    Scale = Hovering and SUBTAB_HOVER_SCALE or 1,
+                }):Play()
+
+                if Handle.Active then
+                    return
+                end
+
+                TweenService:Create(Chip, Library.TweenInfo, {
+                    BackgroundTransparency = Hovering and 0.45 or 1,
+                }):Play()
+                TweenService:Create(ButtonStroke, Library.TweenInfo, {
+                    Transparency = Hovering and 0.7 or 1,
+                }):Play()
+                for Index, Shadow in ButtonShadows do
+                    TweenService:Create(Shadow, Library.TweenInfo, {
+                        BackgroundTransparency = Hovering and SUBTAB_SHADOW_TRANSPARENCY[Index] + 0.2 or 1,
+                    }):Play()
+                end
+                TweenService:Create(ButtonLabel, Library.TweenInfo, {
+                    TextTransparency = Hovering and 0.1 or SUBTAB_IDLE_TRANSPARENCY,
+                }):Play()
+                if ButtonIcon then
+                    TweenService:Create(ButtonIcon, Library.TweenInfo, {
+                        ImageTransparency = Hovering and 0.1 or SUBTAB_IDLE_TRANSPARENCY,
                     }):Play()
                 end
             end
 
             function Handle:SetVisible(Value: boolean)
                 Entry.Visible = Value and true or false
+
+                --// Hiding a hovered row never fires MouseLeave
+                if not Value then
+                    ButtonScale.Scale = 1
+                end
+
                 ResizeSidebarList(false)
             end
 
@@ -12178,20 +12401,10 @@ function Library:CreateWindow(WindowInfo)
             end
 
             Entry.MouseEnter:Connect(function()
-                if Handle.Active then
-                    return
-                end
-
-                TweenService:Create(EntryLabel, Library.TweenInfo, { TextTransparency = 0.2 }):Play()
+                Handle:Hover(true)
             end)
             Entry.MouseLeave:Connect(function()
-                if Handle.Active then
-                    return
-                end
-
-                TweenService:Create(EntryLabel, Library.TweenInfo, {
-                    TextTransparency = SUBTAB_IDLE_TRANSPARENCY,
-                }):Play()
+                Handle:Hover(false)
             end)
 
             Entry.MouseButton1Click:Connect(function()
