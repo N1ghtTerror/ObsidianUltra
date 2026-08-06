@@ -386,9 +386,6 @@ local Templates = {
         MinimizedWidth = 300,
         MinimizedSubtitle = "",
 
-        SidebarSubTabs = false,
-        KeepSubTabBar = false,
-
         CornerRadius = 4,
         NotifySide = "Right",
         ShowCustomCursor = true,
@@ -11963,11 +11960,9 @@ function Library:CreateWindow(WindowInfo)
         end
 
         --// Sidebar sub tabs \\--
-        --// When SidebarSubTabs is on, a tab's sub tabs are listed under it in the
-        --// sidebar and the top row is hidden unless KeepSubTabBar asks for both.
-        local UseSidebarSubTabs = WindowInfo.SidebarSubTabs == true
-        local ShowSubTabBar = not UseSidebarSubTabs or WindowInfo.KeepSubTabBar == true
-
+        --// Sub tabs are one feature: giving a tab sub tabs nests them under it in the
+        --// sidebar as a collapsible list. The top row is still built underneath, since
+        --// the buttons and the underline hang off it, but it is never shown.
         local function SidebarListHeight(): number
             return SidebarListLayout and SidebarListLayout.AbsoluteContentSize.Y or 0
         end
@@ -12006,7 +12001,7 @@ function Library:CreateWindow(WindowInfo)
 
         --// Built on the first AddSubTab, so tabs without sub tabs stay untouched
         local function EnsureSidebarList()
-            if SidebarList or not UseSidebarSubTabs then
+            if SidebarList then
                 return
             end
 
@@ -12245,9 +12240,9 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, -4, 0, SUBTAB_BAR_HEIGHT),
                 Position = UDim2.fromOffset(2, 0),
-                --// Still built when nested in the sidebar: the underline and the
-                --// existing button state machine hang off it
-                Visible = ShowSubTabBar,
+                --// Built but never shown: the sub tab buttons and the underline hang
+                --// off it, while the sidebar list is what the user actually sees
+                Visible = false,
                 ZIndex = 2,
                 Parent = TabContainer,
             })

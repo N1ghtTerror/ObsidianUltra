@@ -15,11 +15,16 @@ Types for these additions live in `Library.d.luau`; `Example.lua` has runnable u
 
 ## Sub tabs (tabs inside a tab)
 
-A sub tab is a second level of tabs *inside* one sidebar tab. They render as a row of
-buttons across the top of the tab's content area, above the groupboxes. This is not the
-same thing as a **Tabbox** — a Tabbox is a small tabbed widget that lives inside one
-column, while a sub tab owns the entire content area and has its own left and right
+A sub tab is a second level of tabs *inside* one sidebar tab. Giving a tab sub tabs turns
+its sidebar button into a **collapsible list**: the sub tabs are listed under it, indented,
+and the tab grows a chevron to expand and collapse them. There is nothing to turn on. This
+is not the same thing as a **Tabbox** — a Tabbox is a small tabbed widget that lives inside
+one column, while a sub tab owns the entire content area and has its own left and right
 columns.
+
+> Upstream Obsidian has no sub tabs at all. Earlier versions of this fork drew them as a
+> row of buttons across the top of the content area, and briefly offered both behind a
+> `SidebarSubTabs` option. That option is gone: the sidebar list is the only presentation.
 
 ### Creating them
 
@@ -55,45 +60,7 @@ Available on a sub tab: `AddGroupbox`, `AddLeftGroupbox`, `AddRightGroupbox`, `A
 Fields: `Type` (`"SubTab"`), `Name`, `Window`, `Tab` (the parent tab), `Canvas`, `Button`,
 `Sides`, `Groupboxes`, `Tabboxes`, `DependencyGroupboxes`.
 
-### Alignment
-
-The button row is centered by default:
-
-```lua
-Combat:SetSubTabAlignment("Left")   -- "Left" | "Center" | "Right"
-```
-
-The active sub tab is drawn as a rounded chip: a fill lighter than `MainColor`, a thin
-outline, a drop shadow, an accent label, and a bar underneath. Idle sub tabs are label only
-at 40% transparency; hover sits between the two.
-
-Hovering squashes the chip slightly (a `UIScale` tween). This applies to the active sub tab
-as well — hovering the chip you are already on still responds — while every other hover
-change is skipped for it.
-
-The sub tab button is only the hit target and the layout item: it is transparent and keeps
-a fixed size so the row never reflows, and everything visible sits in a scaled holder
-inside it, with two offset shadow layers as siblings of the chip. Roblox renders children
-above their parent, so the shadow cannot be a child of the chip it falls behind.
-
-There is **one** underline shared by the whole bar, not one per button: it slides and
-resizes to the newly active chip on every switch, gradienting from the font colour at both
-ends to the accent colour in the middle. It snaps rather than slides on the first show and
-when the bar is resized. Disable the slide with
-`Animations = { SubTabUnderline = false }` — unlike the other animation flags it defaults
-to `true`.
-
-### Nesting them in the sidebar
-
-By default sub tabs render as the button row described above. Turn on `SidebarSubTabs` and
-they are listed **under their tab in the sidebar** instead, as a collapsible tree:
-
-```lua
-Library:CreateWindow({
-    SidebarSubTabs = true,
-    KeepSubTabBar = false,  -- true shows the top row as well
-})
-```
+### The sidebar list
 
 A tab that has sub tabs grows a chevron on the right of its sidebar button. Clicking the
 **chevron** expands or collapses the list without switching tabs; clicking the **tab
@@ -101,13 +68,10 @@ itself** switches to it and opens its list. Only one list is open at a time: ope
 collapses the previously open one. Selecting a nested row switches to that tab first if it
 was not already open, then to the sub tab.
 
-The open sub tab's row is marked with an accent bar, an accent label, and a faint fill. The
-list animates open and closed; disable that with `Animations = { SidebarSubTabs = false }`,
-which like `SubTabUnderline` defaults to `true`.
-
-With `SidebarSubTabs` on, the top button row is hidden and stops reserving vertical space,
-so groupboxes start higher up the tab. It is still built underneath, which is why
-`Tab:SetSubTabAlignment` and the underline keep working if you turn `KeepSubTabBar` on.
+The open sub tab's row is marked with an accent bar, an accent label, and a faint fill;
+idle rows are label only at 40% transparency, and hover sits between the two. The list
+animates open and closed, and the chevron rotates with it. Disable both with
+`Animations = { SidebarSubTabs = false }`, which like `SubTabUnderline` defaults to `true`.
 
 A compacted sidebar has no room for labels, so nested lists collapse while compact and the
 open tab's list reopens when the sidebar expands again.
@@ -120,6 +84,16 @@ Tab:ToggleExpanded()
 Tab:IsExpanded()
 ```
 
+### The hidden button row
+
+The old top row is still built for every tab that has sub tabs, but it is never shown and
+reserves no vertical space, so groupboxes start at the top of the tab. It survives because
+the sub tab buttons and the sliding underline hang off it and the whole show/hide state
+machine is written against them.
+
+That means `Tab:SetSubTabAlignment("Left" | "Center" | "Right")` still exists and still
+sets the alignment, but nothing visible changes. `SubTab.Button` likewise still points at a
+real button that happens to be invisible. Treat both as legacy.
 ### Behaviour worth knowing
 
 - **The parent tab becomes a host.** The moment a tab gets its first sub tab, that tab's
@@ -133,14 +107,15 @@ Tab:IsExpanded()
   buttons hidden, and if the active sub tab has no matches the search jumps to one that
   does.
 - Warning boxes still belong to the parent tab (`Tab:UpdateWarningBox`), and the sub tab
-  content is offset below both the warning box and the button row.
+  content is offset below it.
 
 ### Related tab members
 
 - `Tab.SubTabs` — `{ [Name]: SubTab }`
 - `Tab.ActiveSubTab` — the visible sub tab, or `nil`
-- `Tab:GetContentOffset()` — pixels reserved at the top of the tab by the warning box and
-  the sub tab row
+- `Tab:GetContentOffset()` — pixels reserved at the top of the tab by the warning box; the
+  hidden button row reserves nothing
+- `Tab:IsExpanded()`, `Tab:SetExpanded(Value?)`, `Tab:ToggleExpanded()` — the nested list
 - `Library:GetActiveSides()` — the `ScrollingFrame`s currently on screen; returns the
   active sub tab's sides when there is one, otherwise the active tab's. Prefer this over
   `Library.ActiveTab.Sides`, which is wrong whenever sub tabs are in use.

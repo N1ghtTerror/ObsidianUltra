@@ -833,7 +833,7 @@ export type Tab = {
     AddRightTabbox: (self: Tab, Name: string?) -> Tabbox,
     AddSubTab: (self: Tab, Info: { Name: string, Icon: string? } | string, Icon: string?) -> NestedTab,
     SetSubTabAlignment: (self: Tab, Alignment: "Left" | "Center" | "Right") -> (),
-    --// Only meaningful with SidebarSubTabs on: the nested list in the sidebar
+    --// The tab's nested sub tab list in the sidebar; a no-op without sub tabs
     IsExpanded: (self: Tab) -> boolean,
     SetExpanded: (self: Tab, Value: boolean?) -> (),
     ToggleExpanded: (self: Tab) -> (),
@@ -1196,8 +1196,6 @@ export type Library = {
             MinimizeKeybind: Enum.KeyCode?,
             MinimizedWidth: number?,
             MinimizedSubtitle: string?,
-            SidebarSubTabs: boolean?,
-            KeepSubTabBar: boolean?,
             CornerRadius: number?,
             NotifySide: "Left" | "Right"?,
             ShowCustomCursor: boolean?,
