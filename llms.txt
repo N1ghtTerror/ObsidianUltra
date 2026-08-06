@@ -106,11 +106,13 @@ fill lighter than `MainColor`, the thin outline, the accent label, and the hover
 behave identically, including hovering the row you are already on. The row is full width, so
 the icon and label are left aligned rather than centred.
 
-The underline works the same way too. There is **one** bar shared by the list, not one per
-row, gradienting from the font colour at both ends to the accent colour in the middle. It
-slides between rows as the sub tab changes, snaps on the first show, and follows the rows
-when the list resizes. `Animations = { SubTabUnderline = false }` makes it snap in both the
-top row and the sidebar.
+The bar carries over too, stood on its end. Where the top row underlines the open chip, the
+list marks its open row with a **rail down the left**: a full width row has no short text
+edge for an underline to sit under. It is still **one** bar shared by the list, not one per
+row, with the same gradient turned upright so it tapers top to bottom. It slides between
+rows as the sub tab changes, snaps on the first show, and follows the rows when the list
+resizes. `Animations = { SubTabUnderline = false }` makes it snap in both the top row and
+the sidebar.
 
 The list itself animates open and closed; disable that with
 `Animations = { SidebarSubTabs = false }`, which like `SubTabUnderline` defaults to `true`.

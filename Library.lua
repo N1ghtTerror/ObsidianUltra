@@ -2052,6 +2052,10 @@ local SUBTAB_HOVER_SCALE = 0.94
 local SUBTAB_HOVER_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 --// Left inset of a sub tab row nested in the sidebar, lining it up under the tab label
 local SUBTAB_SIDEBAR_INDENT = 30
+--// The nested list marks its open row with a rail down the left rather than an
+--// underline: a full width row has no short text edge to sit under
+local SUBTAB_SIDEBAR_RAIL_X = 16
+local SUBTAB_SIDEBAR_RAIL_WIDTH = 2
 
 --// Expanded dropdown panel open and close
 local DROPDOWN_EXPAND_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -12048,17 +12052,25 @@ function Library:CreateWindow(WindowInfo)
                 Parent = SidebarButtons,
             })
 
-            --// Same gradient bar as the top row, sliding vertically instead
+            --// The same shared bar as the top row, stood on its end: a rail down the
+            --// left of the list that slides to whichever row is open
             SidebarUnderline = New("Frame", {
-                AnchorPoint = Vector2.new(0, 1),
+                AnchorPoint = Vector2.new(0, 0.5),
                 BackgroundColor3 = "AccentColor",
                 BorderSizePixel = 0,
-                Position = UDim2.new(0, 0, 0, 0),
-                Size = UDim2.fromOffset(0, 1),
+                Position = UDim2.fromOffset(SUBTAB_SIDEBAR_RAIL_X, 0),
+                Size = UDim2.fromOffset(SUBTAB_SIDEBAR_RAIL_WIDTH, 0),
                 Visible = false,
                 ZIndex = 4,
                 Parent = SidebarList,
             })
+            table.insert(
+                Library.PillCorners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = SidebarUnderline,
+                })
+            )
             New("UIGradient", {
                 Color = function()
                     return ColorSequence.new({
@@ -12067,6 +12079,8 @@ function Library:CreateWindow(WindowInfo)
                         ColorSequenceKeypoint.new(1, Library.Scheme.FontColor),
                     })
                 end,
+                --// Turned upright so the taper runs top to bottom
+                Rotation = 90,
                 Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 1),
                     NumberSequenceKeypoint.new(0.2, 0.85),
@@ -12127,14 +12141,13 @@ function Library:CreateWindow(WindowInfo)
             end))
         end
 
-        --// Slides the shared bar under Entry's label; snaps when nothing was active yet
+        --// Slides the rail to Entry's row; snaps when nothing was active yet
         function MoveSidebarUnderline(Entry)
             if not (SidebarUnderline and Entry) then
                 return
             end
 
             local Visual = Entry.Visual
-            local Label = Entry.Label
 
             --// A row added this frame has not been laid out yet
             if Visual.AbsoluteSize.X == 0 then
@@ -12148,18 +12161,14 @@ function Library:CreateWindow(WindowInfo)
             end
 
             local Scale = Library.DPIScale
-            local Bottom = (Visual.AbsolutePosition.Y + Visual.AbsoluteSize.Y - SidebarList.AbsolutePosition.Y) / Scale
-
-            --// Unlike the top row, a sidebar chip is full width and its text is left
-            --// aligned, so centring on the chip would strand the bar to the right of
-            --// the word. Track the label instead, and span the text rather than the chip.
-            local OffsetX = (Label.AbsolutePosition.X - SidebarList.AbsolutePosition.X) / Scale
-            local LabelWidth = Label.AbsoluteSize.X / Scale
-            local LineWidth = math.floor(math.min(Entry.TextWidth + 6, LabelWidth))
+            --// Centred on the row, spanning a fraction of the chip's height
+            local Middle = (Visual.AbsolutePosition.Y + Visual.AbsoluteSize.Y / 2 - SidebarList.AbsolutePosition.Y)
+                / Scale
+            local Height = math.floor((Visual.AbsoluteSize.Y / Scale) * SUBTAB_UNDERLINE_WIDTH)
 
             local Target = {
-                Position = UDim2.fromOffset(math.floor(OffsetX - 3), Bottom - SUBTAB_UNDERLINE_GAP),
-                Size = UDim2.fromOffset(LineWidth, 1),
+                Position = UDim2.fromOffset(SUBTAB_SIDEBAR_RAIL_X, math.floor(Middle)),
+                Size = UDim2.fromOffset(SUBTAB_SIDEBAR_RAIL_WIDTH, Height),
             }
 
             if SidebarUnderlineTween then
@@ -12314,8 +12323,6 @@ function Library:CreateWindow(WindowInfo)
                 Button = Entry,
                 Visual = ButtonVisual,
                 Label = ButtonLabel,
-                --// Measured, because the label is full width and the text is not
-                TextWidth = math.ceil(Library:GetTextBounds(SubName, Library.Scheme.Font, 15)),
                 Active = false,
             }
 
