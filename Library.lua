@@ -386,6 +386,9 @@ local Templates = {
         MinimizedWidth = 300,
         MinimizedSubtitle = "",
 
+        SplitView = true,
+        SplitViewMinPaneWidth = 180,
+
         CornerRadius = 4,
         NotifySide = "Right",
         ShowCustomCursor = true,
@@ -2051,6 +2054,9 @@ local SUBTAB_HOVER_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.Easin
 local SUBTAB_SIDEBAR_INDENT = 30
 --// Reserved for the row's icon, kept even when it has none so labels stay aligned
 local SUBTAB_SIDEBAR_ICON_COLUMN = 20
+
+--// Gap left between the two panes of a split view, centred on the divider
+local SPLIT_DIVIDER_GAP = 6
 
 --// Expanded dropdown panel open and close
 local DROPDOWN_EXPAND_TWEEN = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -9701,6 +9707,15 @@ function Library:CreateWindow(WindowInfo)
     local LastExpandedWidth = InitialLeftWidth
     local Minimized = false
     local ApplyWindowVisibility
+
+    --// Split view: the two panes, their divider, and the fraction the left one takes
+    local SplitPrimary
+    local SplitSecondary
+    local SplitDivider
+    local SplitRatio = 0.5
+    --// Set while SetSplitView drives the left pane through Show, so the guard in
+    --// Tab:Show does not tear down the split it is in the middle of building
+    local SettingSplit = false
     --// Extra room reserved at the right of the top bar for the minimize button,
     --// which sits beside the move icon rather than in the search row
     local RightBarInset = WindowInfo.Minimizable and 28 or 0
@@ -10921,6 +10936,292 @@ function Library:CreateWindow(WindowInfo)
 
     function Window:HideTabInfo()
         CurrentTabInfo.Visible = false
+    end
+
+    --// Split View \\--
+    --// Two tabs side by side in the content area. The left pane is the ordinary
+    --// active tab, so search, sub tabs and GetActiveSides keep pointing at it; the
+    --// right pane is driven directly rather than through Show and Hide, since those
+    --// are built around there being exactly one visible tab.
+    local function SplitPaneGeometry()
+        local Half = SPLIT_DIVIDER_GAP / 2
+
+        return {
+            Position = UDim2.fromScale(0, 0),
+            Size = UDim2.new(SplitRatio, -Half, 1, 0),
+        }, {
+            Position = UDim2.new(SplitRatio, Half, 0, 0),
+            Size = UDim2.new(1 - SplitRatio, -Half, 1, 0),
+        }
+    end
+
+    local function ApplySplitLayout(Animate: boolean?)
+        if not (SplitPrimary and SplitSecondary) then
+            return
+        end
+
+        local Left, Right = SplitPaneGeometry()
+        local DividerTarget = {
+            Position = UDim2.new(SplitRatio, 0, 0, 0),
+        }
+
+        if Animate and Library.Animations and Library.Animations.SplitView ~= false then
+            TweenService:Create(SplitPrimary.Canvas, Library.TabTransitionInfo, Left):Play()
+            TweenService:Create(SplitSecondary.Canvas, Library.TabTransitionInfo, Right):Play()
+
+            if SplitDivider then
+                TweenService:Create(SplitDivider, Library.TabTransitionInfo, DividerTarget):Play()
+            end
+        else
+            SplitPrimary.Canvas.Position = Left.Position
+            SplitPrimary.Canvas.Size = Left.Size
+            SplitSecondary.Canvas.Position = Right.Position
+            SplitSecondary.Canvas.Size = Right.Size
+
+            if SplitDivider then
+                SplitDivider.Position = DividerTarget.Position
+            end
+        end
+
+        SplitPrimary:RefreshSides()
+        SplitSecondary:RefreshSides()
+    end
+
+    --// Built once, on the first split
+    local function EnsureSplitDivider()
+        if SplitDivider then
+            return
+        end
+
+        SplitDivider = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0),
+            BackgroundColor3 = "OutlineColor",
+            Position = UDim2.fromScale(0.5, 0),
+            Size = UDim2.new(0, 1, 1, 0),
+            Visible = false,
+            ZIndex = 5,
+            Parent = Container,
+        })
+
+        --// Wider than the line so it can actually be grabbed
+        local Grabber = New("TextButton", {
+            AnchorPoint = Vector2.new(0.5, 0),
+            BackgroundTransparency = 1,
+            Position = UDim2.fromScale(0.5, 0),
+            Size = UDim2.new(0, 10, 1, 0),
+            Text = "",
+            ZIndex = 6,
+            Parent = SplitDivider,
+        })
+
+        local Dragging = false
+        local Changed
+
+        Grabber.MouseEnter:Connect(function()
+            TweenService:Create(SplitDivider, Library.TweenInfo, {
+                BackgroundColor3 = Library:GetLighterColor(Library.Scheme.OutlineColor),
+            }):Play()
+        end)
+        Grabber.MouseLeave:Connect(function()
+            if Dragging then
+                return
+            end
+
+            TweenService:Create(SplitDivider, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.OutlineColor,
+            }):Play()
+        end)
+
+        Grabber.InputBegan:Connect(function(Input: InputObject)
+            if not IsClickInput(Input) then
+                return
+            end
+
+            Dragging = true
+
+            Changed = Input.Changed:Connect(function()
+                if Input.UserInputState ~= Enum.UserInputState.End then
+                    return
+                end
+
+                Dragging = false
+                if Changed and Changed.Connected then
+                    Changed:Disconnect()
+                    Changed = nil
+                end
+
+                TweenService:Create(SplitDivider, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.OutlineColor,
+                }):Play()
+            end)
+        end)
+
+        Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
+            if not Dragging or not IsHoverInput(Input) then
+                return
+            end
+            if not (SplitPrimary and SplitSecondary) then
+                Dragging = false
+                return
+            end
+
+            local Width = Container.AbsoluteSize.X
+            if Width <= 0 then
+                return
+            end
+
+            --// Neither pane is allowed to collapse to nothing
+            local MinRatio = math.min(0.5, WindowInfo.SplitViewMinPaneWidth / Width)
+            local Ratio = (Input.Position.X - Container.AbsolutePosition.X) / Width
+
+            SplitRatio = math.clamp(Ratio, MinRatio, 1 - MinRatio)
+            ApplySplitLayout(false)
+        end))
+    end
+
+    function Window:IsSplitView(): boolean
+        return SplitPrimary ~= nil and SplitSecondary ~= nil
+    end
+
+    function Window:GetSplitView()
+        return SplitPrimary, SplitSecondary
+    end
+
+    function Window:GetSplitRatio(): number
+        return SplitRatio
+    end
+
+    function Window:SetSplitRatio(Ratio: number)
+        assert(typeof(Ratio) == "number", "Expected number for Ratio got: " .. typeof(Ratio))
+
+        SplitRatio = math.clamp(Ratio, 0.15, 0.85)
+        ApplySplitLayout(true)
+    end
+
+    function Window:ClearSplitView(Animate: boolean?)
+        if not Window:IsSplitView() then
+            return
+        end
+
+        local Primary, Secondary = SplitPrimary, SplitSecondary
+        SplitPrimary, SplitSecondary = nil, nil
+
+        if SplitDivider then
+            SplitDivider.Visible = false
+        end
+
+        --// The secondary was never the active tab, so it is faded out by hand
+        Secondary.SplitPane = false
+        Secondary:SetSidebarActive(false)
+
+        local Animated = Animate ~= false and Library.Animations and Library.Animations.SplitView ~= false
+
+        if Animated then
+            local Tween = TweenService:Create(Secondary.Canvas, Library.TabTransitionInfo, {
+                GroupTransparency = 1,
+            })
+
+            local Connection
+            Connection = Tween.Completed:Connect(function()
+                Connection:Disconnect()
+
+                if Secondary.SplitPane then
+                    return
+                end
+
+                Secondary.Canvas.Visible = false
+                Secondary.Canvas.GroupTransparency = 0
+            end)
+
+            Tween:Play()
+        else
+            Secondary.Canvas.Visible = false
+            Secondary.Canvas.GroupTransparency = 0
+        end
+
+        Primary.SplitPane = false
+        Primary.Canvas.Position = UDim2.fromScale(0, 0)
+
+        if Animated then
+            TweenService:Create(Primary.Canvas, Library.TabTransitionInfo, {
+                Size = UDim2.fromScale(1, 1),
+            }):Play()
+        else
+            Primary.Canvas.Size = UDim2.fromScale(1, 1)
+        end
+
+        Primary:RefreshSides()
+        Window:ShowTabInfo(Primary.Name, Primary.Description)
+    end
+
+    function Window:SetSplitView(Primary, Secondary)
+        assert(typeof(Primary) == "table" and Primary.Type == "Tab", "Primary must be a Tab")
+        assert(typeof(Secondary) == "table" and Secondary.Type == "Tab", "Secondary must be a Tab")
+        assert(Primary ~= Secondary, "A tab cannot be split against itself")
+        assert(not (Primary.IsKeyTab or Secondary.IsKeyTab), "Key tabs cannot be split")
+
+        if SplitPrimary == Primary and SplitSecondary == Secondary then
+            return
+        end
+
+        --// Start from a clean single tab view
+        if Window:IsSplitView() then
+            Window:ClearSplitView(false)
+        end
+
+        EnsureSplitDivider()
+
+        --// The left pane goes through the ordinary path, so it becomes ActiveTab
+        SettingSplit = true
+        if Library.ActiveTab ~= Primary then
+            Primary:Show()
+        end
+        SettingSplit = false
+
+        SplitPrimary = Primary
+        SplitSecondary = Secondary
+
+        Primary.SplitPane = true
+        Secondary.SplitPane = true
+
+        --// Bring the right pane up by hand: Show would hide the left one
+        local _, Right = SplitPaneGeometry()
+        Secondary.Canvas.Position = Right.Position
+        Secondary.Canvas.Size = Right.Size
+        Secondary.Canvas.Visible = true
+
+        local Animated = Library.Animations and Library.Animations.SplitView ~= false
+        if Animated then
+            Secondary.Canvas.GroupTransparency = 1
+            TweenService:Create(Secondary.Canvas, Library.TabTransitionInfo, {
+                GroupTransparency = 0,
+            }):Play()
+        else
+            Secondary.Canvas.GroupTransparency = 0
+        end
+
+        Secondary:SetSidebarActive(true)
+        Secondary:RefreshSides()
+
+        SplitDivider.Visible = true
+        ApplySplitLayout(true)
+
+        --// Name both panes in the header
+        Window:ShowTabInfo(
+            string.format("%s + %s", Primary.Name, Secondary.Name),
+            Primary.Description or Secondary.Description
+        )
+    end
+
+    function Window:ToggleSplitView(Secondary)
+        if Window:IsSplitView() then
+            Window:ClearSplitView(true)
+            return
+        end
+
+        if Library.ActiveTab and Secondary then
+            Window:SetSplitView(Library.ActiveTab, Secondary)
+        end
     end
 
     function Window:AddTab(...)
@@ -12865,7 +13166,7 @@ function Library:CreateWindow(WindowInfo)
         end
 
         function Tab:Hover(Hovering)
-            if Library.ActiveTab == Tab then
+            if Library.ActiveTab == Tab or Tab.SplitPane then
                 return
             end
 
@@ -12879,9 +13180,31 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
+        --// The right pane of a split view is never the active tab, so its sidebar
+        --// button is lit by hand rather than by Show and Hide
+        function Tab:SetSidebarActive(Active: boolean)
+            TweenService:Create(TabButton, Library.TweenInfo, {
+                BackgroundTransparency = Active and 0 or 1,
+            }):Play()
+            TweenService:Create(TabLabel, Library.TweenInfo, {
+                TextTransparency = Active and 0 or 0.5,
+            }):Play()
+
+            if TabIcon then
+                TweenService:Create(TabIcon, Library.TweenInfo, {
+                    ImageTransparency = Active and 0 or 0.5,
+                }):Play()
+            end
+        end
+
         function Tab:Show()
             if Library.ActiveTab == Tab then
                 return
+            end
+
+            --// Opening any other tab leaves the split view
+            if not SettingSplit and Window:IsSplitView() then
+                Window:ClearSplitView(false)
             end
 
             if Library.ActiveTab then
@@ -12949,6 +13272,11 @@ function Library:CreateWindow(WindowInfo)
             TabHolder.Visible = Visible
             TabButton.Visible = Visible
 
+            --// A hidden tab cannot stay on screen as a split pane
+            if not Visible and Tab.SplitPane then
+                Window:ClearSplitView(false)
+            end
+
             if not Visible and Library.ActiveTab == Tab then
                 Tab:Hide()
             end
@@ -12956,6 +13284,11 @@ function Library:CreateWindow(WindowInfo)
 
         function Tab:Destroy()
             Tab.Destroyed = true
+
+            --// Leave the split before the canvas goes away underneath it
+            if Tab.SplitPane then
+                Window:ClearSplitView(false)
+            end
 
             if Tab.Connections then
                 for _, Connection in Tab.Connections do
@@ -13026,7 +13359,20 @@ function Library:CreateWindow(WindowInfo)
         TabButton.MouseLeave:Connect(function()
             Tab:Hover(false)
         end)
-        TabButton.MouseButton1Click:Connect(Tab.Show)
+        TabButton.MouseButton1Click:Connect(function()
+            --// Shift click splits this tab against the one already open
+            if WindowInfo.SplitView and Library.ActiveTab and Library.ActiveTab ~= Tab then
+                local ShiftHeld = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+                    or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+
+                if ShiftHeld and not Library.ActiveTab.IsKeyTab then
+                    Window:SetSplitView(Library.ActiveTab, Tab)
+                    return
+                end
+            end
+
+            Tab:Show()
+        end)
 
         Library.Tabs[Name] = Tab
 

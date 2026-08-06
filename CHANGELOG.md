@@ -19,6 +19,9 @@
 + Sub tabs are now one feature with two views shown at once: the button row above the groupboxes and a collapsible list nested under the tab in the sidebar
 + Both are painted from the same SubTab:Show/Hide, so switching in either drives the other
 + Tab:SetExpanded/ToggleExpanded/IsExpanded, Animations.SidebarSubTabs
++ Split view: shift click a sidebar tab to show it beside the open one, with a draggable divider
++ Window:SetSplitView/ClearSplitView/ToggleSplitView/IsSplitView/GetSplitView/SetSplitRatio/GetSplitRatio
++ WindowInfo.SplitView, WindowInfo.SplitViewMinPaneWidth, Animations.SplitView
 + Window:SetMinimized/ToggleMinimized/IsMinimized, SetMinimizedSubtitle, AddMinimizedLabel, ClearMinimizedLabels
 + WindowInfo.Minimizable, MinimizeKeybind, MinimizedWidth, MinimizedSubtitle
 

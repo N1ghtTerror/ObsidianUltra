@@ -785,6 +785,34 @@ MinimizeGroupBox:AddToggle("MinimizedBusy", {
 	end,
 })
 
+-- Split view demo. Shift clicking a sidebar tab does the same thing without any code.
+local SplitGroupBox = Tabs.Main:AddLeftGroupbox("Split View", "columns-2")
+SplitGroupBox:AddButton({
+	Text = "Split Main with UI Settings",
+	Func = function()
+		Window:SetSplitView(Tabs.Main, Tabs["UI Settings"])
+	end,
+})
+SplitGroupBox:AddButton({
+	Text = "Clear split view",
+	Func = function()
+		Window:ClearSplitView()
+	end,
+})
+SplitGroupBox:AddSlider("SplitRatio", {
+	Text = "Split ratio",
+	Default = 50,
+	Min = 20,
+	Max = 80,
+	Rounding = 0,
+	Suffix = "%",
+	Callback = function(Value)
+		if Window:IsSplitView() then
+			Window:SetSplitRatio(Value / 100)
+		end
+	end,
+})
+
 local TabBox = Tabs.Main:AddRightTabbox() -- Add Tabbox on right side
 
 -- Anything we can do in a Groupbox, we can do in a Tabbox tab (AddToggle, AddSlider, AddLabel, etc etc...)
