@@ -2007,6 +2007,17 @@ function Library:MakeLine(Frame: GuiObject, Info)
     return Line
 end
 
+--// 9 sliced soft shadow sprite. The slice keeps the blur a constant thickness however
+--// the frame is stretched, so one image serves every button width
+local SHADOW_IMAGE = "rbxassetid://6014261993"
+local SHADOW_SLICE_CENTER = Rect.new(49, 49, 450, 450)
+
+--// Button lift. Kept shallow because button rows sit close together, so a wide shadow
+--// would bleed onto its neighbours; hover deepens it rather than moving the button
+local BUTTON_SHADOW_SPREAD = 5
+local BUTTON_SHADOW_TRANSPARENCY = 0.6
+local BUTTON_SHADOW_HOVER_TRANSPARENCY = 0.35
+
 function Library:AddOutline(Frame: GuiObject)
     local OutlineStroke = New("UIStroke", {
         Color = "OutlineColor",
@@ -2021,6 +2032,36 @@ function Library:AddOutline(Frame: GuiObject)
         Parent = Frame,
     })
     return OutlineStroke, ShadowStroke
+end
+
+--// Soft drop shadow behind a frame.
+--// It is parented to the frame rather than placed beside it so it follows the frame's
+--// position, visibility and lifetime for free. What puts it *behind* the frame is the
+--// lower ZIndex: with the default Sibling ZIndexBehavior a descendant draws behind its
+--// parent's background when its ZIndex is lower, so callers give the frame ZIndex 2 and
+--// the shadow lands on 1 -- still above the groupbox it sits in, since equal ZIndex is
+--// broken by descendant order.
+function Library:AddShadow(Frame: GuiObject, Info)
+    Info = Info or {}
+
+    local Spread = Info.Spread or 6
+    local YOffset = Info.YOffset or 2
+
+    local Shadow = New("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundTransparency = 1,
+        Image = SHADOW_IMAGE,
+        ImageColor3 = "DarkColor",
+        ImageTransparency = Info.Transparency or 0.55,
+        Position = UDim2.new(0.5, 0, 0.5, YOffset),
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = SHADOW_SLICE_CENTER,
+        Size = UDim2.new(1, Spread * 2, 1, Spread * 2),
+        ZIndex = Info.ZIndex or 1,
+        Parent = Frame,
+    })
+
+    return Shadow
 end
 
 function Library:AddBlank(Frame: GuiObject, Size: UDim2)
@@ -5053,7 +5094,15 @@ do
                 TextSize = 14,
                 TextTransparency = 0.4,
                 Visible = Button.Visible,
+                --// Lifted a level so the shadow underneath has a rung to sit on
+                ZIndex = 2,
                 Parent = Holder,
+            })
+
+            --// Disabled buttons read as inert, so they get no lift
+            local Shadow = Library:AddShadow(Base, {
+                Spread = BUTTON_SHADOW_SPREAD,
+                Transparency = Button.Disabled and 1 or BUTTON_SHADOW_TRANSPARENCY,
             })
 
             local Stroke = New("UIStroke", {
@@ -5071,7 +5120,7 @@ do
                 })
             )
 
-            return Base, Stroke
+            return Base, Stroke, Shadow
         end
 
         local function InitEvents(Button)
@@ -5084,6 +5133,10 @@ do
                     TextTransparency = 0,
                 })
                 Button.Tween:Play()
+
+                TweenService:Create(Button.Shadow, Library.TweenInfo, {
+                    ImageTransparency = BUTTON_SHADOW_HOVER_TRANSPARENCY,
+                }):Play()
             end)
             Button.Base.MouseLeave:Connect(function()
                 if Button.Disabled then
@@ -5094,6 +5147,10 @@ do
                     TextTransparency = 0.4,
                 })
                 Button.Tween:Play()
+
+                TweenService:Create(Button.Shadow, Library.TweenInfo, {
+                    ImageTransparency = BUTTON_SHADOW_TRANSPARENCY,
+                }):Play()
             end)
 
             Button.Base.MouseButton1Click:Connect(function()
@@ -5127,7 +5184,7 @@ do
             end)
         end
 
-        Button.Base, Button.Stroke = CreateButton(Button)
+        Button.Base, Button.Stroke, Button.Shadow = CreateButton(Button)
         InitEvents(Button)
 
         function Button:AddButton(...)
@@ -5154,7 +5211,7 @@ do
             }
 
             Button.SubButton = SubButton
-            SubButton.Base, SubButton.Stroke = CreateButton(SubButton)
+            SubButton.Base, SubButton.Stroke, SubButton.Shadow = CreateButton(SubButton)
             InitEvents(SubButton)
 
             function SubButton:UpdateColors()
@@ -5168,6 +5225,7 @@ do
                     or Library.Scheme.MainColor
                 SubButton.Base.TextTransparency = SubButton.Disabled and 0.8 or 0.4
                 SubButton.Stroke.Transparency = SubButton.Disabled and 0.5 or 0
+                SubButton.Shadow.ImageTransparency = SubButton.Disabled and 1 or BUTTON_SHADOW_TRANSPARENCY
 
                 Library.Registry[SubButton.Base].BackgroundColor3 = SubButton.Disabled and "BackgroundColor"
                     or "MainColor"
@@ -5257,6 +5315,7 @@ do
                 or Library.Scheme.MainColor
             Button.Base.TextTransparency = Button.Disabled and 0.8 or 0.4
             Button.Stroke.Transparency = Button.Disabled and 0.5 or 0
+            Button.Shadow.ImageTransparency = Button.Disabled and 1 or BUTTON_SHADOW_TRANSPARENCY
 
             Library.Registry[Button.Base].BackgroundColor3 = Button.Disabled and "BackgroundColor" or "MainColor"
         end
@@ -13026,7 +13085,17 @@ function Library:CreateWindow(WindowInfo)
         TabButton.MouseLeave:Connect(function()
             Tab:Hover(false)
         end)
-        TabButton.MouseButton1Click:Connect(Tab.Show)
+        --// Clicking the tab that is already open collapses its sub tab list, and
+        --// expands it again. Tab:Show early returns on the open tab, so without this
+        --// the row is dead once you are on it and only the small chevron closes it
+        TabButton.MouseButton1Click:Connect(function()
+            if Library.ActiveTab == Tab and next(Tab.SubTabs) ~= nil then
+                Tab:ToggleExpanded()
+                return
+            end
+
+            Tab:Show()
+        end)
 
         Library.Tabs[Name] = Tab
 
