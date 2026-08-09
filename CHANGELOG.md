@@ -5,7 +5,9 @@
 + Built-in Notification History: every Library:Notify call is logged automatically, no manual hooking needed
 + Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
 + Draggable panel lists each notification's timestamp, title and description, newest first
-+ Library.NotificationHistory, Library.NotificationHistoryLimit (default 100), Library:GetNotificationHistory(), Library:ClearNotificationHistory(), Library:RefreshNotificationHistory(), Library:SetNotificationHistoryVisible(bool)
++ Notification bell icon in the top bar (left of the minimize/move icons) with an unread count badge; click it to open the history
++ Opening the history clears the unread badge
++ Library.NotificationHistory, Library.NotificationHistoryLimit (default 100), Library.NotificationUnreadCount, Library:GetNotificationHistory(), Library:ClearNotificationHistory(), Library:RefreshNotificationHistory(), Library:SetNotificationHistoryVisible(bool), Library:UpdateNotificationBadge()
 ```
 
 ## 05.08.2026

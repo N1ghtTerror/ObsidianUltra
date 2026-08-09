@@ -205,6 +205,8 @@ local Library = {
     NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
     NotificationHistoryFrame = nil,
     NotificationHistoryContainer = nil,
+    NotificationUnreadCount = 0,
+    NotificationBadge = nil,
 
     --// Dialogues \\--
     Dialogues = {},
@@ -9647,7 +9649,21 @@ function Library:AddNotificationToHistory(Entry)
 
     if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
         Library:RefreshNotificationHistory()
+    else
+        Library.NotificationUnreadCount = (Library.NotificationUnreadCount or 0) + 1
+        Library:UpdateNotificationBadge()
     end
+end
+
+function Library:UpdateNotificationBadge()
+    local Badge = Library.NotificationBadge
+    if not Badge then
+        return
+    end
+
+    local Count = Library.NotificationUnreadCount or 0
+    Badge.Holder.Visible = Count > 0
+    Badge.Label.Text = Count > 99 and "99+" or tostring(Count)
 end
 
 function Library:GetNotificationHistory()
@@ -9787,6 +9803,9 @@ function Library:SetNotificationHistoryVisible(Visible: boolean)
 
     if Visible then
         Library:RefreshNotificationHistory()
+        --// Opening the panel marks everything as read
+        Library.NotificationUnreadCount = 0
+        Library:UpdateNotificationBadge()
     end
 
     Library.NotificationHistoryFrame.Visible = Visible and true or false
@@ -9886,9 +9905,10 @@ function Library:CreateWindow(WindowInfo)
     local LastExpandedWidth = InitialLeftWidth
     local Minimized = false
     local ApplyWindowVisibility
-    --// Extra room reserved at the right of the top bar for the minimize button,
-    --// which sits beside the move icon rather than in the search row
-    local RightBarInset = WindowInfo.Minimizable and 28 or 0
+    --// Extra room reserved at the right of the top bar for the notification bell
+    --// and (when enabled) the minimize button, which sit beside the move icon
+    --// rather than in the search row
+    local RightBarInset = (WindowInfo.Minimizable and 28 or 0) + 30
 
     do
         Library.KeybindFrame, Library.KeybindContainer = Library:AddDraggableMenu("Keybinds")
@@ -10457,6 +10477,100 @@ function Library:CreateWindow(WindowInfo)
                 SizeConstraint = Enum.SizeConstraint.RelativeYY,
                 Parent = TopBar,
             })
+        end
+
+        do
+            --// Notification bell: sits left of the minimize/move cluster and
+            --// opens the built-in Notification History, with an unread badge
+            local BellIcon = Library:GetIcon("bell")
+            local BellRightOffset = WindowInfo.Minimizable and 72 or 42
+
+            local BellButton = New("TextButton", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 1,
+                Position = UDim2.new(1, -BellRightOffset, 0.5, 0),
+                Size = UDim2.fromOffset(24, 24),
+                Text = BellIcon and "" or "!",
+                TextSize = 14,
+                TextTransparency = 0.35,
+                ZIndex = 3,
+                Parent = TopBar,
+            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = BellButton,
+                })
+            )
+
+            local BellImage
+            if BellIcon then
+                BellImage = New("ImageLabel", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundTransparency = 1,
+                    Image = BellIcon.Url,
+                    ImageColor3 = "FontColor",
+                    ImageRectOffset = BellIcon.ImageRectOffset,
+                    ImageRectSize = BellIcon.ImageRectSize,
+                    ImageTransparency = 0.35,
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    ScaleType = Enum.ScaleType.Fit,
+                    Size = UDim2.fromOffset(16, 16),
+                    ZIndex = 4,
+                    Parent = BellButton,
+                })
+            end
+
+            --// Unread count badge, hidden until there is something unread
+            local BadgeHolder = New("Frame", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundColor3 = "AccentColor",
+                Position = UDim2.new(1, 2, 0, -2),
+                Size = UDim2.fromOffset(14, 14),
+                Visible = false,
+                ZIndex = 5,
+                Parent = BellButton,
+            })
+            New("UICorner", {
+                CornerRadius = UDim.new(1, 0),
+                Parent = BadgeHolder,
+            })
+            local BadgeLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                Text = "0",
+                TextColor3 = "BackgroundColor",
+                TextSize = 11,
+                ZIndex = 6,
+                Parent = BadgeHolder,
+            })
+            New("UIPadding", {
+                PaddingLeft = UDim.new(0, 2),
+                PaddingRight = UDim.new(0, 2),
+                Parent = BadgeHolder,
+            })
+
+            Library.NotificationBadge = { Holder = BadgeHolder, Label = BadgeLabel }
+            Library:UpdateNotificationBadge()
+
+            Library:AddTooltip("Notification History", nil, BellButton)
+            BellButton.MouseEnter:Connect(function()
+                TweenService:Create(BellButton, Library.TweenInfo, { BackgroundTransparency = 0 }):Play()
+                if BellImage then
+                    TweenService:Create(BellImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+                end
+            end)
+            BellButton.MouseLeave:Connect(function()
+                TweenService:Create(BellButton, Library.TweenInfo, { BackgroundTransparency = 1 }):Play()
+                if BellImage then
+                    TweenService:Create(BellImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+                end
+            end)
+            BellButton.MouseButton1Click:Connect(function()
+                Library:ToggleNotificationHistory()
+            end)
         end
 
         --// Bottom Bar \\--
@@ -15134,6 +15248,8 @@ function Library:Unload()
     Library.KeybindContainer = nil
     Library.NotificationHistoryFrame = nil
     Library.NotificationHistoryContainer = nil
+    Library.NotificationBadge = nil
+    Library.NotificationUnreadCount = 0
 
     getgenv().Library = nil
 end
