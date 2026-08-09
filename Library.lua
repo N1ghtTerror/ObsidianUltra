@@ -209,12 +209,15 @@ local Library = {
     NotificationHistoryRestPos = nil,
     NotificationUnreadCount = 0,
     NotificationBadge = nil,
+    NotificationBadges = {},
     NotificationBell = nil,
+    NotificationBellMini = nil,
 
     --// Enabled Features (built-in) \\--
     EnabledFeaturesFrame = nil,
     EnabledFeaturesContainer = nil,
     EnabledFeaturesButton = nil,
+    EnabledFeaturesButtonMini = nil,
     EnabledFeaturesOpen = false,
     EnabledFeaturesRestPos = nil,
     --// Primary-text color per notification type; customizable by the user
@@ -9687,14 +9690,16 @@ function Library:AddNotificationToHistory(Entry)
 end
 
 function Library:UpdateNotificationBadge()
-    local Badge = Library.NotificationBadge
-    if not Badge then
-        return
-    end
-
     local Count = Library.NotificationUnreadCount or 0
-    Badge.Holder.Visible = Count > 0
-    Badge.Label.Text = Count > 99 and "99+" or tostring(Count)
+    local Text = Count > 99 and "99+" or tostring(Count)
+
+    --// There can be more than one bell (top bar + minimized card)
+    for _, Badge in Library.NotificationBadges do
+        if Badge.Holder and Badge.Holder.Parent then
+            Badge.Holder.Visible = Count > 0
+            Badge.Label.Text = Text
+        end
+    end
 end
 
 function Library:GetNotificationHistory()
@@ -9735,8 +9740,29 @@ local function GetDropPanelPos(Button, Size)
     return UDim2.fromOffset(MaxX, 56)
 end
 
+--// True only if a GuiObject and all its ancestors are visible (so a hidden
+--// window's buttons are not treated as on-screen)
+local function IsGuiEffectivelyVisible(Gui)
+    local Current = Gui
+    while Current and Current:IsA("GuiObject") do
+        if not Current.Visible then
+            return false
+        end
+        Current = Current.Parent
+    end
+    return true
+end
+
+--// Prefer the minimized-card button when it is the one on screen
+local function PickVisibleButton(Main, Mini)
+    if Mini and IsGuiEffectivelyVisible(Mini) then
+        return Mini
+    end
+    return Main
+end
+
 local function GetNotifyHistoryDefaultPos()
-    return GetDropPanelPos(Library.NotificationBell, NOTIFY_HISTORY_SIZE)
+    return GetDropPanelPos(PickVisibleButton(Library.NotificationBell, Library.NotificationBellMini), NOTIFY_HISTORY_SIZE)
 end
 
 function Library:_BuildNotificationHistory()
@@ -9877,6 +9903,9 @@ function Library:_BuildNotificationHistory()
             return
         end
         if Library.NotificationBell and Library:MouseIsOverFrame(Library.NotificationBell, Location) then
+            return
+        end
+        if Library.NotificationBellMini and Library:MouseIsOverFrame(Library.NotificationBellMini, Location) then
             return
         end
 
@@ -10177,7 +10206,7 @@ end
 local ENABLED_FEATURES_SIZE = Vector2.new(300, 340)
 
 local function GetEnabledFeaturesDefaultPos()
-    return GetDropPanelPos(Library.EnabledFeaturesButton, ENABLED_FEATURES_SIZE)
+    return GetDropPanelPos(PickVisibleButton(Library.EnabledFeaturesButton, Library.EnabledFeaturesButtonMini), ENABLED_FEATURES_SIZE)
 end
 
 function Library:_BuildEnabledFeatures()
@@ -10316,6 +10345,9 @@ function Library:_BuildEnabledFeatures()
             return
         end
         if Library.EnabledFeaturesButton and Library:MouseIsOverFrame(Library.EnabledFeaturesButton, Location) then
+            return
+        end
+        if Library.EnabledFeaturesButtonMini and Library:MouseIsOverFrame(Library.EnabledFeaturesButtonMini, Location) then
             return
         end
 
@@ -11366,10 +11398,108 @@ function Library:CreateWindow(WindowInfo)
                 Parent = MiniTitleHolder,
             })
 
+            --// Mirror the Enabled Features + Notification bell into the minimized card
+            local function MiniActionButton(Icon, Order, TooltipText, OnClick, FallbackText)
+                local Btn = New("TextButton", {
+                    BackgroundTransparency = 1,
+                    LayoutOrder = Order,
+                    Size = UDim2.fromOffset(22, 22),
+                    Text = Icon and "" or (FallbackText or "?"),
+                    TextColor3 = "FontColor",
+                    TextSize = 15,
+                    TextTransparency = 0.35,
+                    Parent = MiniHeader,
+                })
+                local Img
+                if Icon then
+                    Img = New("ImageLabel", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundTransparency = 1,
+                        Image = Icon.Url,
+                        ImageColor3 = "FontColor",
+                        ImageRectOffset = Icon.ImageRectOffset,
+                        ImageRectSize = Icon.ImageRectSize,
+                        ImageTransparency = 0.35,
+                        Position = UDim2.fromScale(0.5, 0.5),
+                        ScaleType = Enum.ScaleType.Fit,
+                        Size = UDim2.fromOffset(16, 16),
+                        Parent = Btn,
+                    })
+                end
+                Btn.MouseEnter:Connect(function()
+                    TweenService:Create(Btn, Library.TweenInfo, { TextTransparency = 0 }):Play()
+                    if Img then
+                        TweenService:Create(Img, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+                    end
+                end)
+                Btn.MouseLeave:Connect(function()
+                    TweenService:Create(Btn, Library.TweenInfo, { TextTransparency = 0.35 }):Play()
+                    if Img then
+                        TweenService:Create(Img, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+                    end
+                end)
+                if TooltipText then
+                    Library:AddTooltip(TooltipText, nil, Btn)
+                end
+                Btn.MouseButton1Click:Connect(OnClick)
+                return Btn
+            end
+
+            local MiniFeatures = MiniActionButton(
+                Library:GetIcon("sliders-horizontal") or Library:GetIcon("list"),
+                2,
+                "Enabled Features",
+                function() Library:ToggleEnabledFeatures() end,
+                "≡"
+            )
+            Library.EnabledFeaturesButtonMini = MiniFeatures
+
+            local MiniBell = MiniActionButton(
+                Library:GetIcon("bell"),
+                3,
+                "Notification History",
+                function() Library:ToggleNotificationHistory() end,
+                "!"
+            )
+            Library.NotificationBellMini = MiniBell
+
+            do
+                --// Unread badge for the minimized bell
+                local BadgeHolder = New("Frame", {
+                    AnchorPoint = Vector2.new(1, 0),
+                    BackgroundColor3 = "AccentColor",
+                    Position = UDim2.new(1, 2, 0, 0),
+                    Size = UDim2.fromOffset(14, 14),
+                    Visible = false,
+                    ZIndex = 5,
+                    Parent = MiniBell,
+                })
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = BadgeHolder,
+                })
+                local BadgeLabel = New("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromScale(1, 1),
+                    Text = "0",
+                    TextColor3 = "BackgroundColor",
+                    TextSize = 11,
+                    ZIndex = 6,
+                    Parent = BadgeHolder,
+                })
+                New("UIPadding", {
+                    PaddingLeft = UDim.new(0, 2),
+                    PaddingRight = UDim.new(0, 2),
+                    Parent = BadgeLabel,
+                })
+                table.insert(Library.NotificationBadges, { Holder = BadgeHolder, Label = BadgeLabel })
+                Library:UpdateNotificationBadge()
+            end
+
             local RestoreIcon = Library:GetIcon("chevron-up")
             local RestoreButton = New("TextButton", {
                 BackgroundTransparency = 1,
-                LayoutOrder = 2,
+                LayoutOrder = 4,
                 Size = UDim2.fromOffset(22, 22),
                 Text = RestoreIcon and "" or "^",
                 TextSize = 14,
@@ -11539,6 +11669,7 @@ function Library:CreateWindow(WindowInfo)
             })
 
             Library.NotificationBadge = { Holder = BadgeHolder, Label = BadgeLabel }
+            table.insert(Library.NotificationBadges, Library.NotificationBadge)
             Library.NotificationBell = BellButton
             Library:UpdateNotificationBadge()
 
@@ -16317,12 +16448,15 @@ function Library:Unload()
     Library.NotificationHistoryOpen = false
     Library.NotificationHistoryRestPos = nil
     Library.NotificationBadge = nil
+    table.clear(Library.NotificationBadges)
     Library.NotificationBell = nil
+    Library.NotificationBellMini = nil
     Library.NotificationUnreadCount = 0
 
     Library.EnabledFeaturesFrame = nil
     Library.EnabledFeaturesContainer = nil
     Library.EnabledFeaturesButton = nil
+    Library.EnabledFeaturesButtonMini = nil
     Library.EnabledFeaturesOpen = false
     Library.EnabledFeaturesRestPos = nil
 

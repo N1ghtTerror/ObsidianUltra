@@ -17,6 +17,7 @@
 + Enabled Features supports toggles (switch), sliders (draggable), inputs (text box) and dropdowns (single-select cycles), plus a reset-to-default button per row
 + Copy feedback now uses a copy/paste icon that pops in with a bounce and swaps to a checkmark, with a rising "Copied!" tag
 + Added themes: Linoria, Hollywood Novo, Rose Pine, V3rmillion, Sakura Drift
++ The Notification and Enabled Features buttons (with the unread badge) now also appear in the minimized window card, and their panels drop from whichever button is on screen
 + Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
 + Draggable panel lists each notification's timestamp, title and description, newest first
 + Notification bell icon in the top bar (left of the minimize/move icons) with an unread count badge; click it to open the history
