@@ -849,6 +849,21 @@ MenuGroup:AddButton("Test Notification", function()
 	})
 end)
 
+-- Type colors the primary text: "Error", "Warning", "Success", "Info"
+MenuGroup:AddDropdown("NotifyTypeTest", {
+	Values = { "Error", "Warning", "Success", "Info" },
+	Default = "Error",
+	Text = "Test Typed Notification",
+	Callback = function(Value)
+		Library:Notify({
+			Title = Value .. " Notification",
+			Description = "This is a " .. Value:lower() .. " message.",
+			Type = Value,
+			Time = 4,
+		})
+	end,
+})
+
 MenuGroup:AddButton("Toggle Notification History", function()
 	Library:ToggleNotificationHistory()
 end)

@@ -63,6 +63,8 @@ export type Tooltip = {
     Destroy: (self: Tooltip) -> (),
 }
 
+export type NotificationType = "Error" | "Warning" | "Success" | "Info"
+
 export type NotificationHistoryEntry = {
     Title: string?,
     Description: string?,
@@ -70,6 +72,7 @@ export type NotificationHistoryEntry = {
     DescriptionColor: Color3?,
     Icon: string?,
     IconColor: Color3 | string?,
+    Type: NotificationType?,
     Timestamp: number?,
     TimeString: string?,
 }
@@ -1035,6 +1038,8 @@ export type Library = {
     NotificationHistoryRestPos: UDim2?,
     NotificationUnreadCount: number,
     NotificationBadge: { Holder: Frame, Label: TextLabel }?,
+    NotificationBell: TextButton?,
+    NotificationTypeColors: { [string]: Color3 },
     ToggleKeybind: Enum.KeyCode,
     TweenInfo: TweenInfo,
     NotifyTweenInfo: TweenInfo,
@@ -1186,6 +1191,7 @@ export type Library = {
             Icon: string | number?,
             IconColor: Color3 | string?,
             BigIcon: string?,
+            Type: NotificationType?,
         } | string,
         Time: number?,
         SoundId: string | number?

@@ -209,6 +209,14 @@ local Library = {
     NotificationHistoryRestPos = nil,
     NotificationUnreadCount = 0,
     NotificationBadge = nil,
+    NotificationBell = nil,
+    --// Primary-text color per notification type; customizable by the user
+    NotificationTypeColors = {
+        Error = Color3.fromRGB(255, 76, 76),
+        Warning = Color3.fromRGB(255, 176, 32),
+        Success = Color3.fromRGB(96, 216, 118),
+        Info = Color3.fromRGB(96, 165, 255),
+    },
 
     --// Dialogues \\--
     Dialogues = {},
@@ -9302,6 +9310,9 @@ function Library:Notify(...)
         Data.BigIcon = Info.BigIcon
         Data.IconColor = Info.IconColor
 
+        --// "Error" | "Warning" | "Success" | "Info" - colors the primary text
+        Data.Type = Info.Type
+
         Data.Volume = tonumber(Info.Volume) or 3
     else
         Data.Description = tostring(Info)
@@ -9310,6 +9321,16 @@ function Library:Notify(...)
         Data.Volume = select(4, ...) or 3
     end
     Data.Destroyed = false
+
+    --// Apply the type color to the primary text unless one was given explicitly
+    local TypeColor = Data.Type and Library.NotificationTypeColors[Data.Type]
+    if TypeColor then
+        if Data.Title and Data.Title ~= "nil" then
+            Data.TitleColor = Data.TitleColor or TypeColor
+        else
+            Data.DescriptionColor = Data.DescriptionColor or TypeColor
+        end
+    end
 
     local DeletedInstance = false
     local DeleteConnection = nil
@@ -9628,6 +9649,7 @@ function Library:Notify(...)
         DescriptionColor = Data.DescriptionColor,
         Icon = Data.Icon,
         IconColor = Data.IconColor,
+        Type = Data.Type,
     })
 
     return Data
@@ -9679,18 +9701,31 @@ function Library:ClearNotificationHistory()
     end
 end
 
---// The draggable system works in top-left offset coordinates, so we place the
---// panel in the bottom-right corner by computing an offset from the viewport
+--// The panel drops down from underneath the notification bell. The draggable
+--// system uses top-left offset coordinates, so we compute an offset for it.
 local NOTIFY_HISTORY_SIZE = Vector2.new(288, 328)
-local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, 14)
+--// Slides up toward the bell as it fades, so it reads as retracting into it
+local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, -22)
+local NotifyHistoryOpenTween = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local NotifyHistoryCloseTween = TweenInfo.new(0.17, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 
 local function GetNotifyHistoryDefaultPos()
     local Camera = workspace.CurrentCamera
     local Viewport = (Camera and Camera.ViewportSize) or Vector2.new(1280, 720)
-    return UDim2.fromOffset(
-        math.max(6, Viewport.X - NOTIFY_HISTORY_SIZE.X - 16),
-        math.max(6, Viewport.Y - NOTIFY_HISTORY_SIZE.Y - 16)
-    )
+    local MaxX = math.max(6, Viewport.X - NOTIFY_HISTORY_SIZE.X - 6)
+    local MaxY = math.max(6, Viewport.Y - NOTIFY_HISTORY_SIZE.Y - 6)
+
+    local Bell = Library.NotificationBell
+    if Bell and Bell.Parent then
+        local BellPos, BellSize = Bell.AbsolutePosition, Bell.AbsoluteSize
+        --// Right edge of the panel lines up with the bell, dropping just below it
+        local X = (BellPos.X + BellSize.X) - NOTIFY_HISTORY_SIZE.X
+        local Y = BellPos.Y + BellSize.Y + 10
+        return UDim2.fromOffset(math.clamp(X, 6, MaxX), math.clamp(Y, 6, MaxY))
+    end
+
+    --// Fallback before a window exists: top-right corner
+    return UDim2.fromOffset(MaxX, 56)
 end
 
 function Library:_BuildNotificationHistory()
@@ -9873,15 +9908,39 @@ function Library:RefreshNotificationHistory()
             Parent = Card,
         })
 
-        New("TextLabel", {
+        local Header = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 14),
+            Parent = Card,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 6),
+            Parent = Header,
+        })
+        New("TextLabel", {
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 0, 1, 0),
             Text = string.format("[%s]", tostring(Entry.TimeString or "")),
             TextColor3 = "AccentColor",
             TextSize = 12,
             TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = Card,
+            Parent = Header,
         })
+        if Entry.Type then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 0, 1, 0),
+                Text = string.upper(tostring(Entry.Type)),
+                TextColor3 = Library.NotificationTypeColors[Entry.Type] or "FontColor",
+                TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Header,
+            })
+        end
 
         if Entry.Title and Entry.Title ~= "nil" then
             New("TextLabel", {
@@ -9933,29 +9992,29 @@ function Library:SetNotificationHistoryVisible(Visible: boolean)
         Library.NotificationUnreadCount = 0
         Library:UpdateNotificationBadge()
 
-        local RestPos = Library.NotificationHistoryRestPos or GetNotifyHistoryDefaultPos()
+        --// Always drop out from under the bell
+        local RestPos = GetNotifyHistoryDefaultPos()
+        Library.NotificationHistoryRestPos = RestPos
         Frame.Position = RestPos + NOTIFY_HISTORY_SLIDE
         Frame.GroupTransparency = 1
         Frame.Visible = true
 
-        TweenService:Create(Frame, Library.NotifyTweenInfo, {
+        TweenService:Create(Frame, NotifyHistoryOpenTween, {
             Position = RestPos,
             GroupTransparency = 0,
         }):Play()
     else
-        --// Remember where it rests (it may have been dragged) so we slide back to it
+        --// Retract up toward the bell from wherever it currently sits
         local RestPos = Frame.Position
-        Library.NotificationHistoryRestPos = RestPos
 
-        TweenService:Create(Frame, Library.NotifyTweenInfo, {
+        TweenService:Create(Frame, NotifyHistoryCloseTween, {
             Position = RestPos + NOTIFY_HISTORY_SLIDE,
             GroupTransparency = 1,
         }):Play()
 
-        task.delay(Library.NotifyTweenInfo.Time, function()
+        task.delay(NotifyHistoryCloseTween.Time, function()
             if Library._NotifHistoryAnim == AnimId and not Library.NotificationHistoryOpen and Frame and Frame.Parent then
                 Frame.Visible = false
-                Frame.Position = RestPos
             end
         end)
     end
@@ -10703,6 +10762,7 @@ function Library:CreateWindow(WindowInfo)
             })
 
             Library.NotificationBadge = { Holder = BadgeHolder, Label = BadgeLabel }
+            Library.NotificationBell = BellButton
             Library:UpdateNotificationBadge()
 
             Library:AddTooltip("Notification History", nil, BellButton)
@@ -15401,6 +15461,7 @@ function Library:Unload()
     Library.NotificationHistoryOpen = false
     Library.NotificationHistoryRestPos = nil
     Library.NotificationBadge = nil
+    Library.NotificationBell = nil
     Library.NotificationUnreadCount = 0
 
     getgenv().Library = nil
