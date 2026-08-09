@@ -4,12 +4,15 @@
 [fixes]
 + Notification History no longer duplicates its "No notifications yet." placeholder on refresh
 + Fixed the history panel rendering off-screen
++ Corner radius now reliably re-applies to keybind pills and other corners after the radius passes through 0 (each corner remembers its square/half/full ratio instead of getting stuck)
 
 [features]
 + Built-in Notification History: every Library:Notify call is logged automatically, no manual hooking needed
 + History panel drops down from under the notification bell with a smooth slide + fade, and retracts back into it on close
 + X button in the panel's title bar
 + Notify Type ("Error" | "Warning" | "Success" | "Info") colors the primary text and shows a colored tag in history; customizable via Library.NotificationTypeColors
++ Click a notification in the history to copy its text (with a copy icon and confirmation flash)
++ Clicking outside the history panel now closes it
 + Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
 + Draggable panel lists each notification's timestamp, title and description, newest first
 + Notification bell icon in the top bar (left of the minimize/move icons) with an unread count badge; click it to open the history

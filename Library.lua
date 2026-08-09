@@ -9852,6 +9852,26 @@ function Library:_BuildNotificationHistory()
         table.insert(Library.DraggableElements, Holder)
     end
 
+    --// Clicking anywhere outside the panel (and not on the bell) closes it
+    Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObject)
+        if Library.Unloaded or not Library.NotificationHistoryOpen then
+            return
+        end
+        if not IsClickInput(Input, true) then
+            return
+        end
+
+        local Location = Input.Position
+        if Library:MouseIsOverFrame(Holder, Location) then
+            return
+        end
+        if Library.NotificationBell and Library:MouseIsOverFrame(Library.NotificationBell, Location) then
+            return
+        end
+
+        Library:SetNotificationHistoryVisible(false)
+    end))
+
     Library.NotificationHistoryFrame = Holder
     Library.NotificationHistoryContainer = Scroller
     Library.NotificationHistoryRestPos = Holder.Position
@@ -9881,37 +9901,107 @@ function Library:RefreshNotificationHistory()
         return
     end
 
+    local CopyIcon = Library:GetIcon("copy")
+    local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
+
     for _, Entry in Library.NotificationHistory do
-        local Card = New("Frame", {
+        local Card = New("TextButton", {
             AutomaticSize = Enum.AutomaticSize.Y,
+            AutoButtonColor = false,
             BackgroundColor3 = "MainColor",
             Size = UDim2.new(1, 0, 0, 0),
+            Text = "",
             Parent = Scroller,
         })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius),
-                Parent = Card,
-            })
-        )
+        --// Not registered in Library.Corners: cards are rebuilt on every refresh,
+        --// so they simply adopt the current radius instead of leaking references
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Card,
+        })
         Library:AddOutline(Card)
+
+        --// Inner content holds the list; the copy icon overlays outside of it
+        local Content = New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            Parent = Card,
+        })
         New("UIListLayout", {
             Padding = UDim.new(0, 2),
-            Parent = Card,
+            Parent = Content,
         })
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 6),
             PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 24),
             PaddingTop = UDim.new(0, 6),
-            Parent = Card,
+            Parent = Content,
         })
+
+        local CopyImage
+        if CopyIcon then
+            CopyImage = New("ImageLabel", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundTransparency = 1,
+                Image = CopyIcon.Url,
+                ImageColor3 = "FontColor",
+                ImageRectOffset = CopyIcon.ImageRectOffset,
+                ImageRectSize = CopyIcon.ImageRectSize,
+                ImageTransparency = 0.55,
+                Position = UDim2.new(1, -7, 0, 7),
+                Size = UDim2.fromOffset(13, 13),
+                ZIndex = 6,
+                Parent = Card,
+            })
+        end
+
+        Library:AddTooltip("Click to copy", nil, Card)
+        Card.MouseEnter:Connect(function()
+            if CopyImage then
+                TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.1 }):Play()
+            end
+        end)
+        Card.MouseLeave:Connect(function()
+            if CopyImage then
+                TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.55 }):Play()
+            end
+        end)
+        Card.MouseButton1Click:Connect(function()
+            local Parts = {}
+            if Entry.TimeString then
+                table.insert(Parts, string.format("[%s]", tostring(Entry.TimeString)))
+            end
+            if Entry.Title and Entry.Title ~= "nil" then
+                table.insert(Parts, tostring(Entry.Title))
+            end
+            if Entry.Description and Entry.Description ~= "nil" then
+                table.insert(Parts, tostring(Entry.Description))
+            end
+            local Text = table.concat(Parts, "\n")
+
+            if Clipboard then
+                pcall(Clipboard, Text)
+            end
+
+            --// Brief green flash on the copy icon as confirmation
+            if CopyImage then
+                CopyImage.ImageColor3 = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
+                CopyImage.ImageTransparency = 0
+                task.delay(0.6, function()
+                    if CopyImage and CopyImage.Parent then
+                        CopyImage.ImageColor3 = Library.Scheme.FontColor
+                        TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.55 }):Play()
+                    end
+                end)
+            end
+        end)
 
         local Header = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 14),
-            Parent = Card,
+            Parent = Content,
         })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
@@ -9952,7 +10042,7 @@ function Library:RefreshNotificationHistory()
                 TextSize = 15,
                 TextWrapped = true,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Card,
+                Parent = Content,
             })
         end
 
@@ -9966,7 +10056,7 @@ function Library:RefreshNotificationHistory()
                 TextSize = 14,
                 TextWrapped = true,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Card,
+                Parent = Content,
             })
         end
     end
@@ -11065,13 +11155,33 @@ function Library:CreateWindow(WindowInfo)
     local Window = {}
     local Fading = false
 
-    local function SetUICorner(UICorner, Corner, HalfCurrent, HalfValue, Value)
-        local Current = UICorner[Corner]
-        if Current.Offset == 0 and Current.Scale == 0 then
-            return
+    --// Each corner remembers its intended ratio to the window radius (0 = square,
+    --// 0.5 = half, 1 = full), captured once while the radius is still non-zero.
+    --// This keeps corners from getting permanently stuck square after the radius
+    --// slider passes through 0.
+    local function ApplyCornerRadius(UICorner, Prop, Radius, OldRadius)
+        local Attr = "RadMul_" .. Prop
+        local Mult = UICorner:GetAttribute(Attr)
+
+        if Mult == nil then
+            local Offset = UICorner[Prop].Offset
+            if OldRadius > 0 then
+                local Ratio = Offset / OldRadius
+                if Ratio < 0.25 then
+                    Mult = 0
+                elseif Ratio < 0.75 then
+                    Mult = 0.5
+                else
+                    Mult = 1
+                end
+                UICorner:SetAttribute(Attr, Mult)
+            else
+                --// Can't derive reliably at 0; don't cache, guess from the offset
+                Mult = Offset > 0 and 1 or 0
+            end
         end
 
-        UICorner[Corner] = Current.Offset == HalfCurrent and HalfValue or Value
+        UICorner[Prop] = UDim.new(0, Radius * Mult)
     end
 
     function Window:ChangeTitle(title)
@@ -11157,16 +11267,10 @@ function Library:CreateWindow(WindowInfo)
         assert(typeof(Radius) == "number", "Expected number for Radius got: " .. typeof(Radius))
         Radius = math.min(Radius, 20)
 
-        local RadiusHalf = UDim.new(0, Radius / 2)
-        local RadiusUDim = UDim.new(0, Radius)
-        local HalfCurrent = Library.CornerRadius / 2
+        local OldRadius = Library.CornerRadius
 
         for _, UICorner in Library.Corners do
-            if UICorner.CornerRadius.Offset == HalfCurrent then
-                UICorner.CornerRadius = RadiusHalf
-            else
-                UICorner.CornerRadius = RadiusUDim
-            end
+            ApplyCornerRadius(UICorner, "CornerRadius", Radius, OldRadius)
         end
 
         for _, UICorner in Library.PillCorners do
@@ -11174,10 +11278,10 @@ function Library:CreateWindow(WindowInfo)
         end
 
         for _, UICorner in Library.SpecificCorners do
-            SetUICorner(UICorner, "TopRightRadius", HalfCurrent, RadiusHalf, RadiusUDim)
-            SetUICorner(UICorner, "TopLeftRadius", HalfCurrent, RadiusHalf, RadiusUDim)
-            SetUICorner(UICorner, "BottomRightRadius", HalfCurrent, RadiusHalf, RadiusUDim)
-            SetUICorner(UICorner, "BottomLeftRadius", HalfCurrent, RadiusHalf, RadiusUDim)
+            ApplyCornerRadius(UICorner, "TopRightRadius", Radius, OldRadius)
+            ApplyCornerRadius(UICorner, "TopLeftRadius", Radius, OldRadius)
+            ApplyCornerRadius(UICorner, "BottomRightRadius", Radius, OldRadius)
+            ApplyCornerRadius(UICorner, "BottomLeftRadius", Radius, OldRadius)
         end
 
         Library.CornerRadius = Radius
