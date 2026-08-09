@@ -838,6 +838,24 @@ MenuGroup:AddToggle("ShowCustomCursor", {
 		Library.ShowCustomCursor = Value
 	end,
 })
+
+-- Notification History (built-in): every Library:Notify is logged automatically,
+-- toggle the panel with RightAlt or Library:ToggleNotificationHistory()
+MenuGroup:AddButton("Test Notification", function()
+	Library:Notify({
+		Title = "Test Notification",
+		Description = "Fired at " .. os.date("%H:%M:%S") .. " - open the history with RightAlt!",
+		Time = 4,
+	})
+end)
+
+MenuGroup:AddButton("Toggle Notification History", function()
+	Library:ToggleNotificationHistory()
+end)
+
+MenuGroup:AddButton("Clear Notification History", function()
+	Library:ClearNotificationHistory()
+end)
 MenuGroup:AddDropdown("NotificationSide", {
 	Values = { "Left", "Right" },
 	Default = "Right",
