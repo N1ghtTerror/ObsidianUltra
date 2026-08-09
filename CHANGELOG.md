@@ -1,8 +1,13 @@
 ## 09.08.2026
 
 ```diff
+[fixes]
++ Notification History no longer duplicates its "No notifications yet." placeholder on refresh
+
 [features]
 + Built-in Notification History: every Library:Notify call is logged automatically, no manual hooking needed
++ Smooth fade + slide animation on open/close, and an X button in the panel's title bar
++ Panel now rests in the bottom-right corner by default and remembers where you drag it
 + Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
 + Draggable panel lists each notification's timestamp, title and description, newest first
 + Notification bell icon in the top bar (left of the minimize/move icons) with an unread count badge; click it to open the history

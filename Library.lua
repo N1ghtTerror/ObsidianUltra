@@ -205,6 +205,8 @@ local Library = {
     NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
     NotificationHistoryFrame = nil,
     NotificationHistoryContainer = nil,
+    NotificationHistoryOpen = false,
+    NotificationHistoryRestPos = nil,
     NotificationUnreadCount = 0,
     NotificationBadge = nil,
 
@@ -9647,7 +9649,7 @@ function Library:AddNotificationToHistory(Entry)
         table.remove(Library.NotificationHistory)
     end
 
-    if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
+    if Library.NotificationHistoryOpen then
         Library:RefreshNotificationHistory()
     else
         Library.NotificationUnreadCount = (Library.NotificationUnreadCount or 0) + 1
@@ -9677,34 +9679,138 @@ function Library:ClearNotificationHistory()
     end
 end
 
+--// Bottom-right corner by default: a clean, out-of-the-way resting spot
+local NOTIFY_HISTORY_DEFAULT_POS = UDim2.new(1, -6, 1, -6)
+local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, 14)
+
 function Library:_BuildNotificationHistory()
     if Library.NotificationHistoryFrame then
         return
     end
 
-    local Frame, Container = Library:AddDraggableMenu("Notification History")
-    Frame.Size = UDim2.fromOffset(280, 0)
-    Frame.AnchorPoint = Vector2.new(1, 0.5)
-    Frame.Position = UDim2.new(1, -6, 0.5, 0)
-    Frame.Visible = false
+    local Holder = New("CanvasGroup", {
+        AnchorPoint = Vector2.new(1, 1),
+        BackgroundColor3 = "BackgroundColor",
+        Position = NOTIFY_HISTORY_DEFAULT_POS,
+        Size = UDim2.fromOffset(288, 328),
+        GroupTransparency = 1,
+        Visible = false,
+        ZIndex = 10,
+        Parent = ScreenGui,
+    })
+    table.insert(
+        Library.Corners,
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Holder,
+        })
+    )
+    table.insert(
+        Library.Scales,
+        New("UIScale", {
+            Parent = Holder,
+        })
+    )
+    Library:AddOutline(Holder)
+
+    local TitleLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 34),
+        Text = "Notification History",
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 36),
+        Parent = TitleLabel,
+    })
+
+    Library:MakeLine(Holder, {
+        Position = UDim2.fromOffset(0, 34),
+        Size = UDim2.new(1, 0, 0, 1),
+    })
+
+    --// Close (X) button in the title bar
+    local CloseIcon = Library:GetIcon("x")
+    local CloseButton = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -8, 0, 17),
+        Size = UDim2.fromOffset(20, 20),
+        Text = CloseIcon and "" or "X",
+        TextColor3 = "FontColor",
+        TextSize = 14,
+        TextTransparency = 0.35,
+        ZIndex = 11,
+        Parent = Holder,
+    })
+    local CloseImage
+    if CloseIcon then
+        CloseImage = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Image = CloseIcon.Url,
+            ImageColor3 = "FontColor",
+            ImageRectOffset = CloseIcon.ImageRectOffset,
+            ImageRectSize = CloseIcon.ImageRectSize,
+            ImageTransparency = 0.35,
+            Position = UDim2.fromScale(0.5, 0.5),
+            ScaleType = Enum.ScaleType.Fit,
+            Size = UDim2.fromOffset(14, 14),
+            ZIndex = 12,
+            Parent = CloseButton,
+        })
+    end
+    CloseButton.MouseEnter:Connect(function()
+        TweenService:Create(CloseButton, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        if CloseImage then
+            TweenService:Create(CloseImage, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+        end
+    end)
+    CloseButton.MouseLeave:Connect(function()
+        TweenService:Create(CloseButton, Library.TweenInfo, { TextTransparency = 0.35 }):Play()
+        if CloseImage then
+            TweenService:Create(CloseImage, Library.TweenInfo, { ImageTransparency = 0.35 }):Play()
+        end
+    end)
+    CloseButton.MouseButton1Click:Connect(function()
+        Library:SetNotificationHistoryVisible(false)
+    end)
 
     local Scroller = New("ScrollingFrame", {
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.fromScale(0, 0),
+        Position = UDim2.fromOffset(0, 35),
         ScrollBarThickness = 4,
         ScrollBarImageColor3 = "AccentColor",
-        Size = UDim2.fromOffset(266, 300),
-        Parent = Container,
+        Size = UDim2.new(1, 0, 1, -35),
+        Parent = Holder,
     })
     New("UIListLayout", {
         Padding = UDim.new(0, 6),
         Parent = Scroller,
     })
+    New("UIPadding", {
+        PaddingBottom = UDim.new(0, 8),
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        PaddingTop = UDim.new(0, 8),
+        Parent = Scroller,
+    })
 
-    Library.NotificationHistoryFrame = Frame
+    Library:MakeDraggable(Holder, TitleLabel, true)
+    if not table.find(Library.DraggableElements, Holder) then
+        table.insert(Library.DraggableElements, Holder)
+    end
+    PositionDraggable(Holder, NOTIFY_HISTORY_DEFAULT_POS)
+
+    Library.NotificationHistoryFrame = Holder
     Library.NotificationHistoryContainer = Scroller
+    Library.NotificationHistoryRestPos = Holder.Position
 end
 
 function Library:RefreshNotificationHistory()
@@ -9712,7 +9818,7 @@ function Library:RefreshNotificationHistory()
 
     local Scroller = Library.NotificationHistoryContainer
     for _, Child in Scroller:GetChildren() do
-        if Child:IsA("Frame") then
+        if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
             Child:Destroy()
         end
     end
@@ -9801,19 +9907,54 @@ end
 function Library:SetNotificationHistoryVisible(Visible: boolean)
     Library:_BuildNotificationHistory()
 
+    local Frame = Library.NotificationHistoryFrame
+    Visible = Visible and true or false
+
+    if Library.NotificationHistoryOpen == Visible then
+        return
+    end
+    Library.NotificationHistoryOpen = Visible
+
+    Library._NotifHistoryAnim = (Library._NotifHistoryAnim or 0) + 1
+    local AnimId = Library._NotifHistoryAnim
+
     if Visible then
         Library:RefreshNotificationHistory()
         --// Opening the panel marks everything as read
         Library.NotificationUnreadCount = 0
         Library:UpdateNotificationBadge()
-    end
 
-    Library.NotificationHistoryFrame.Visible = Visible and true or false
+        local RestPos = Library.NotificationHistoryRestPos or NOTIFY_HISTORY_DEFAULT_POS
+        Frame.Position = RestPos + NOTIFY_HISTORY_SLIDE
+        Frame.GroupTransparency = 1
+        Frame.Visible = true
+
+        TweenService:Create(Frame, Library.NotifyTweenInfo, {
+            Position = RestPos,
+            GroupTransparency = 0,
+        }):Play()
+    else
+        --// Remember where it rests (it may have been dragged) so we slide back to it
+        local RestPos = Frame.Position
+        Library.NotificationHistoryRestPos = RestPos
+
+        TweenService:Create(Frame, Library.NotifyTweenInfo, {
+            Position = RestPos + NOTIFY_HISTORY_SLIDE,
+            GroupTransparency = 1,
+        }):Play()
+
+        task.delay(Library.NotifyTweenInfo.Time, function()
+            if Library._NotifHistoryAnim == AnimId and not Library.NotificationHistoryOpen and Frame and Frame.Parent then
+                Frame.Visible = false
+                Frame.Position = RestPos
+            end
+        end)
+    end
 end
 
 function Library:ToggleNotificationHistory()
     Library:_BuildNotificationHistory()
-    Library:SetNotificationHistoryVisible(not Library.NotificationHistoryFrame.Visible)
+    Library:SetNotificationHistoryVisible(not Library.NotificationHistoryOpen)
 end
 
 function Library:CreateWindow(WindowInfo)
@@ -15248,6 +15389,8 @@ function Library:Unload()
     Library.KeybindContainer = nil
     Library.NotificationHistoryFrame = nil
     Library.NotificationHistoryContainer = nil
+    Library.NotificationHistoryOpen = false
+    Library.NotificationHistoryRestPos = nil
     Library.NotificationBadge = nil
     Library.NotificationUnreadCount = 0
 
