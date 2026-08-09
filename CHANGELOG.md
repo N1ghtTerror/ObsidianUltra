@@ -11,8 +11,9 @@
 + History panel drops down from under the notification bell with a smooth slide + fade, and retracts back into it on close
 + X button in the panel's title bar
 + Notify Type ("Error" | "Warning" | "Success" | "Info") colors the primary text and shows a colored tag in history; customizable via Library.NotificationTypeColors
-+ Click a notification in the history to copy its text (with a copy icon and confirmation flash)
++ Click a notification in the history to copy its text: clipboard icon swaps to a check and a "Copied!" tag flashes in as feedback
 + Clicking outside the history panel now closes it
++ New "Enabled Features" top-bar button: opens a smooth, organized panel listing every currently-enabled toggle, each with a switch to turn it off on the spot (Library:ToggleEnabledFeatures / SetEnabledFeaturesVisible / RefreshEnabledFeatures)
 + Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
 + Draggable panel lists each notification's timestamp, title and description, newest first
 + Notification bell icon in the top bar (left of the minimize/move icons) with an unread count badge; click it to open the history
