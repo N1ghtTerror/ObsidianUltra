@@ -13,7 +13,10 @@
 + Notify Type ("Error" | "Warning" | "Success" | "Info") colors the primary text and shows a colored tag in history; customizable via Library.NotificationTypeColors
 + Click a notification in the history to copy its text: clipboard icon swaps to a check and a "Copied!" tag flashes in as feedback
 + Clicking outside the history panel now closes it
-+ New "Enabled Features" top-bar button: opens a smooth, organized panel listing every currently-enabled toggle, each with a switch to turn it off on the spot (Library:ToggleEnabledFeatures / SetEnabledFeaturesVisible / RefreshEnabledFeatures)
++ New "Enabled Features" top-bar button: opens a smooth, organized panel listing every element changed from its default (only altered values appear), each with an inline control to tweak it
++ Enabled Features supports toggles (switch), sliders (draggable), inputs (text box) and dropdowns (single-select cycles), plus a reset-to-default button per row
++ Copy feedback now uses a copy/paste icon that pops in with a bounce and swaps to a checkmark, with a rising "Copied!" tag
++ Added themes: Linoria, Hollywood Novo, Rose Pine, V3rmillion, Sakura Drift
 + Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
 + Draggable panel lists each notification's timestamp, title and description, newest first
 + Notification bell icon in the top bar (left of the minimize/move icons) with an unread count badge; click it to open the history

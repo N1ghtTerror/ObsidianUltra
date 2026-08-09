@@ -9912,7 +9912,8 @@ function Library:RefreshNotificationHistory()
         return
     end
 
-    local ClipboardIcon = Library:GetIcon("clipboard")
+    --// "copy" is the two-page copy/paste glyph; success swaps to a checkmark
+    local ClipboardIcon = Library:GetIcon("copy")
     local ClipboardCheckIcon = Library:GetIcon("clipboard-check") or Library:GetIcon("check")
     local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
     local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
@@ -10014,7 +10015,7 @@ function Library:RefreshNotificationHistory()
                 Ok = pcall(Clipboard, Text)
             end
 
-            --// Icon swaps to a checkmark and the "Copied!" tag flashes in
+            --// Icon swaps to a checkmark and pops in with a little bounce
             if CopyImage then
                 if Ok and ClipboardCheckIcon then
                     CopyImage.Image = ClipboardCheckIcon.Url
@@ -10023,11 +10024,21 @@ function Library:RefreshNotificationHistory()
                 end
                 CopyImage.ImageColor3 = Ok and SuccessColor or (Library.NotificationTypeColors.Error or Color3.fromRGB(255, 76, 76))
                 CopyImage.ImageTransparency = 0
+
+                CopyImage.Size = UDim2.fromOffset(9, 9)
+                TweenService:Create(CopyImage, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.fromOffset(13, 13),
+                }):Play()
             end
 
+            --// "Copied!" tag rises up while fading in then out
             CopiedLabel.Text = Ok and "Copied!" or "No clipboard"
             CopiedLabel.TextColor3 = Ok and SuccessColor or (Library.NotificationTypeColors.Error or Color3.fromRGB(255, 76, 76))
             CopiedLabel.TextTransparency = 0
+            CopiedLabel.Position = UDim2.new(1, -24, 0, 9)
+            TweenService:Create(CopiedLabel, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -24, 0, 5),
+            }):Play()
             TweenService:Create(CopiedLabel, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
                 TextTransparency = 1,
             }):Play()
@@ -10316,6 +10327,119 @@ function Library:_BuildEnabledFeatures()
     Library.EnabledFeaturesRestPos = Holder.Position
 end
 
+--// True if two option values differ (handles multi-dropdown tables)
+local function FeatureValuesEqual(A, B)
+    if type(A) == "table" and type(B) == "table" then
+        for K, V in A do
+            if B[K] ~= V then
+                return false
+            end
+        end
+        for K, V in B do
+            if A[K] ~= V then
+                return false
+            end
+        end
+        return true
+    end
+    return A == B
+end
+
+--// A dropdown stores its default as an array of indices into Values; resolve
+--// that back into the same shape as Dropdown.Value (a value, or a {[val]=true} map)
+local function DropdownDefaultValue(Dropdown)
+    local Indices = Dropdown.Default
+    if Dropdown.Multi then
+        local Map = {}
+        if type(Indices) == "table" then
+            for _, Index in Indices do
+                local Value = Dropdown.Values and Dropdown.Values[Index]
+                if Value ~= nil then
+                    Map[Value] = true
+                end
+            end
+        end
+        return Map
+    else
+        if type(Indices) == "table" and Indices[1] then
+            return Dropdown.Values and Dropdown.Values[Indices[1]] or nil
+        end
+        return nil
+    end
+end
+
+--// Whether an element's current value has been changed from its default
+local function FeatureIsAltered(Element)
+    if Element.Type == "Dropdown" then
+        local Default = DropdownDefaultValue(Element)
+        if Element.Multi then
+            return not FeatureValuesEqual(Element.Value or {}, Default)
+        end
+        return Element.Value ~= Default
+    end
+
+    if Element.Default == nil then
+        return false
+    end
+    return Element.Value ~= Element.Default
+end
+
+--// A small "reset to default" button; resets then rebuilds the list so the
+--// now-unaltered element drops out
+local function BuildFeatureReset(Parent, Element)
+    local Icon = Library:GetIcon("rotate-ccw")
+    local Button = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, 0, 0.5, 0),
+        Size = UDim2.fromOffset(18, 18),
+        Text = Icon and "" or "↺",
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextTransparency = 0.4,
+        Parent = Parent,
+    })
+    local Image
+    if Icon then
+        Image = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundTransparency = 1,
+            Image = Icon.Url,
+            ImageColor3 = "FontColor",
+            ImageRectOffset = Icon.ImageRectOffset,
+            ImageRectSize = Icon.ImageRectSize,
+            ImageTransparency = 0.4,
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(13, 13),
+            Parent = Button,
+        })
+    end
+    Library:AddTooltip("Reset to default", nil, Button)
+    Button.MouseEnter:Connect(function()
+        TweenService:Create(Button, Library.TweenInfo, { TextTransparency = 0 }):Play()
+        if Image then
+            TweenService:Create(Image, Library.TweenInfo, { ImageTransparency = 0 }):Play()
+        end
+    end)
+    Button.MouseLeave:Connect(function()
+        TweenService:Create(Button, Library.TweenInfo, { TextTransparency = 0.4 }):Play()
+        if Image then
+            TweenService:Create(Image, Library.TweenInfo, { ImageTransparency = 0.4 }):Play()
+        end
+    end)
+    Button.MouseButton1Click:Connect(function()
+        local DefaultValue = Element.Default
+        if Element.Type == "Dropdown" then
+            DefaultValue = DropdownDefaultValue(Element)
+        end
+        pcall(function()
+            Element:SetValue(DefaultValue)
+        end)
+        Library:RefreshEnabledFeatures()
+    end)
+    return Button
+end
+
 --// A compact on/off switch that mirrors a toggle's live state
 local function BuildFeatureSwitch(Parent, Toggle)
     local Switch = New("TextButton", {
@@ -10372,6 +10496,174 @@ local function BuildFeatureSwitch(Parent, Toggle)
     return Switch
 end
 
+--// A compact draggable slider bound to a Slider option
+local function BuildFeatureSlider(Parent, Slider)
+    local Bar = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        Position = UDim2.new(1, -24, 0.5, 0),
+        Size = UDim2.fromOffset(116, 16),
+        Text = "",
+        Parent = Parent,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Bar })
+    New("UIStroke", { Color = "OutlineColor", Parent = Bar })
+    local Fill = New("Frame", {
+        BackgroundColor3 = "AccentColor",
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 0, 1, 0),
+        Parent = Bar,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Fill })
+    local ValueLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Text = "",
+        TextColor3 = "FontColor",
+        TextSize = 12,
+        ZIndex = 2,
+        Parent = Bar,
+    })
+
+    local function Update()
+        local Range = Slider.Max - Slider.Min
+        local Alpha = Range > 0 and (Slider.Value - Slider.Min) / Range or 0
+        Fill.Size = UDim2.new(math.clamp(Alpha, 0, 1), 0, 1, 0)
+        ValueLabel.Text = string.format("%s%s%s", tostring(Slider.Prefix or ""), tostring(Slider.Value), tostring(Slider.Suffix or ""))
+    end
+
+    local function SetFromX(PX)
+        local Rel = (PX - Bar.AbsolutePosition.X) / math.max(1, Bar.AbsoluteSize.X)
+        local Alpha = math.clamp(Rel, 0, 1)
+        local Raw = Slider.Min + Alpha * (Slider.Max - Slider.Min)
+        local Factor = 10 ^ (Slider.Rounding or 0)
+        Slider:SetValue(math.floor(Raw * Factor + 0.5) / Factor)
+        Update()
+    end
+
+    local MoveConn, EndConn
+    Bar.InputBegan:Connect(function(Input: InputObject)
+        if Slider.Disabled then
+            return
+        end
+        if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then
+            return
+        end
+
+        SetFromX(Input.Position.X)
+        MoveConn = UserInputService.InputChanged:Connect(function(Move: InputObject)
+            if Move.UserInputType == Enum.UserInputType.MouseMovement or Move.UserInputType == Enum.UserInputType.Touch then
+                SetFromX(Move.Position.X)
+            end
+        end)
+        EndConn = UserInputService.InputEnded:Connect(function(Ended: InputObject)
+            if Ended.UserInputType == Enum.UserInputType.MouseButton1 or Ended.UserInputType == Enum.UserInputType.Touch then
+                if MoveConn then MoveConn:Disconnect() MoveConn = nil end
+                if EndConn then EndConn:Disconnect() EndConn = nil end
+            end
+        end)
+    end)
+
+    Update()
+    return Bar
+end
+
+--// A text box bound to an Input option
+local function BuildFeatureInput(Parent, Input)
+    local Box = New("TextBox", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        ClearTextOnFocus = false,
+        Position = UDim2.new(1, -24, 0.5, 0),
+        Size = UDim2.fromOffset(116, 20),
+        Text = tostring(Input.Value or ""),
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextEditable = not Input.Disabled,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Parent,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Box })
+    New("UIStroke", { Color = "OutlineColor", Parent = Box })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 6),
+        Parent = Box,
+    })
+    Box.FocusLost:Connect(function()
+        pcall(function()
+            Input:SetValue(Box.Text)
+        end)
+        Box.Text = tostring(Input.Value or "")
+    end)
+    return Box
+end
+
+--// A dropdown value display; single-select cycles on click, multi shows a summary
+local function BuildFeatureDropdown(Parent, Dropdown)
+    local Button = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = "BackgroundColor",
+        Position = UDim2.new(1, -24, 0.5, 0),
+        Size = UDim2.fromOffset(116, 20),
+        Text = "",
+        Parent = Parent,
+    })
+    New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = Button })
+    New("UIStroke", { Color = "OutlineColor", Parent = Button })
+    local Label = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -12, 1, 0),
+        Position = UDim2.fromOffset(6, 0),
+        Text = "",
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Button,
+    })
+
+    local function Display()
+        if Dropdown.Multi then
+            local Parts = {}
+            if type(Dropdown.Value) == "table" then
+                for Val, On in Dropdown.Value do
+                    if On then
+                        table.insert(Parts, tostring(Val))
+                    end
+                end
+            end
+            Label.Text = #Parts > 0 and table.concat(Parts, ", ") or "None"
+        else
+            Label.Text = tostring(Dropdown.Value or "None")
+        end
+    end
+
+    if not Dropdown.Multi then
+        Library:AddTooltip("Click to cycle", nil, Button)
+        Button.MouseButton1Click:Connect(function()
+            local Values = Dropdown.Values
+            if not Values or #Values == 0 then
+                return
+            end
+            local Idx = (Dropdown.Value ~= nil and table.find(Values, Dropdown.Value)) or 0
+            for Step = 1, #Values do
+                local Candidate = Values[((Idx - 1 + Step) % #Values) + 1]
+                local IsDisabled = Dropdown.DisabledValues and table.find(Dropdown.DisabledValues, Candidate)
+                if not IsDisabled then
+                    Dropdown:SetValue(Candidate)
+                    break
+                end
+            end
+            Display()
+        end)
+    end
+
+    Display()
+    return Button
+end
+
 function Library:RefreshEnabledFeatures()
     Library:_BuildEnabledFeatures()
 
@@ -10382,35 +10674,44 @@ function Library:RefreshEnabledFeatures()
         end
     end
 
-    --// Collect every toggle that is currently enabled, sorted by name
-    local Enabled = {}
+    --// Gather every element whose value differs from its default
+    local Items = {}
     for _, Toggle in Library.Toggles do
-        if typeof(Toggle) == "table" and Toggle.Type == "Toggle" and Toggle.Value == true and not Toggle.Disabled then
-            table.insert(Enabled, Toggle)
+        if typeof(Toggle) == "table" and Toggle.Type == "Toggle" and not Toggle.Disabled and FeatureIsAltered(Toggle) then
+            table.insert(Items, Toggle)
         end
     end
-    table.sort(Enabled, function(A, B)
+    for _, Option in Library.Options do
+        if typeof(Option) == "table" and not Option.Disabled then
+            local T = Option.Type
+            if (T == "Slider" or T == "Input" or T == "Dropdown") and FeatureIsAltered(Option) then
+                table.insert(Items, Option)
+            end
+        end
+    end
+    table.sort(Items, function(A, B)
         return tostring(A.Text or ""):lower() < tostring(B.Text or ""):lower()
     end)
 
-    if #Enabled == 0 then
+    if #Items == 0 then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 24),
-            Text = "No features enabled.",
+            Text = "No features changed from default.",
             TextColor3 = "FontColor",
             TextTransparency = 0.4,
             TextSize = 14,
+            TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = Scroller,
         })
         return
     end
 
-    for _, Toggle in Enabled do
+    for _, Element in Items do
         local Row = New("Frame", {
             BackgroundColor3 = "MainColor",
-            Size = UDim2.new(1, 0, 0, 30),
+            Size = UDim2.new(1, 0, 0, 34),
             Parent = Scroller,
         })
         New("UICorner", {
@@ -10424,12 +10725,13 @@ function Library:RefreshEnabledFeatures()
             Parent = Row,
         })
 
+        local IsToggle = Element.Type == "Toggle"
         New("TextLabel", {
             AnchorPoint = Vector2.new(0, 0.5),
             BackgroundTransparency = 1,
             Position = UDim2.new(0, 0, 0.5, 0),
-            Size = UDim2.new(1, -44, 1, 0),
-            Text = tostring(Toggle.Text or "Feature"),
+            Size = UDim2.new(1, IsToggle and -44 or -150, 1, 0),
+            Text = tostring(Element.Text or "Feature"),
             TextColor3 = "FontColor",
             TextSize = 14,
             TextTruncate = Enum.TextTruncate.AtEnd,
@@ -10437,7 +10739,18 @@ function Library:RefreshEnabledFeatures()
             Parent = Row,
         })
 
-        BuildFeatureSwitch(Row, Toggle)
+        if Element.Type == "Toggle" then
+            BuildFeatureSwitch(Row, Element)
+        elseif Element.Type == "Slider" then
+            BuildFeatureSlider(Row, Element)
+            BuildFeatureReset(Row, Element)
+        elseif Element.Type == "Input" then
+            BuildFeatureInput(Row, Element)
+            BuildFeatureReset(Row, Element)
+        elseif Element.Type == "Dropdown" then
+            BuildFeatureDropdown(Row, Element)
+            BuildFeatureReset(Row, Element)
+        end
     end
 end
 

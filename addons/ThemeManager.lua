@@ -135,6 +135,26 @@ local ThemeManager = {
         ["Monochrome"] = {
             22,
             { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "8a8a8a", BackgroundColor = "121212", OutlineColor = "333333", BackgroundImage = "" },
+        },
+        ["Linoria"] = {
+            23,
+            { FontColor = "ffffff", MainColor = "1c1c1c", AccentColor = "0055ff", BackgroundColor = "191919", OutlineColor = "373737", BackgroundImage = "" },
+        },
+        ["Hollywood Novo"] = {
+            24,
+            { FontColor = "f5f0e6", MainColor = "1a1a1a", AccentColor = "d4af37", BackgroundColor = "0d0d0d", OutlineColor = "2e2e2e", BackgroundImage = "" },
+        },
+        ["Rose Pine"] = {
+            25,
+            { FontColor = "e0def4", MainColor = "1f1d2e", AccentColor = "c4a7e7", BackgroundColor = "191724", OutlineColor = "26233a", BackgroundImage = "" },
+        },
+        ["V3rmillion"] = {
+            26,
+            { FontColor = "ffffff", MainColor = "232323", AccentColor = "e34234", BackgroundColor = "1a1a1a", OutlineColor = "333333", BackgroundImage = "" },
+        },
+        ["Sakura Drift"] = {
+            27,
+            { FontColor = "ffe9f2", MainColor = "2a2028", AccentColor = "ff9ec4", BackgroundColor = "1f1720", OutlineColor = "3a2c36", BackgroundImage = "" },
         }
     }
 }
