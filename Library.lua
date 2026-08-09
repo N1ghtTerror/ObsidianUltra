@@ -9679,9 +9679,19 @@ function Library:ClearNotificationHistory()
     end
 end
 
---// Bottom-right corner by default: a clean, out-of-the-way resting spot
-local NOTIFY_HISTORY_DEFAULT_POS = UDim2.new(1, -6, 1, -6)
+--// The draggable system works in top-left offset coordinates, so we place the
+--// panel in the bottom-right corner by computing an offset from the viewport
+local NOTIFY_HISTORY_SIZE = Vector2.new(288, 328)
 local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, 14)
+
+local function GetNotifyHistoryDefaultPos()
+    local Camera = workspace.CurrentCamera
+    local Viewport = (Camera and Camera.ViewportSize) or Vector2.new(1280, 720)
+    return UDim2.fromOffset(
+        math.max(6, Viewport.X - NOTIFY_HISTORY_SIZE.X - 16),
+        math.max(6, Viewport.Y - NOTIFY_HISTORY_SIZE.Y - 16)
+    )
+end
 
 function Library:_BuildNotificationHistory()
     if Library.NotificationHistoryFrame then
@@ -9689,10 +9699,10 @@ function Library:_BuildNotificationHistory()
     end
 
     local Holder = New("CanvasGroup", {
-        AnchorPoint = Vector2.new(1, 1),
+        AnchorPoint = Vector2.new(0, 0),
         BackgroundColor3 = "BackgroundColor",
-        Position = NOTIFY_HISTORY_DEFAULT_POS,
-        Size = UDim2.fromOffset(288, 328),
+        Position = GetNotifyHistoryDefaultPos(),
+        Size = UDim2.fromOffset(NOTIFY_HISTORY_SIZE.X, NOTIFY_HISTORY_SIZE.Y),
         GroupTransparency = 1,
         Visible = false,
         ZIndex = 10,
@@ -9806,7 +9816,6 @@ function Library:_BuildNotificationHistory()
     if not table.find(Library.DraggableElements, Holder) then
         table.insert(Library.DraggableElements, Holder)
     end
-    PositionDraggable(Holder, NOTIFY_HISTORY_DEFAULT_POS)
 
     Library.NotificationHistoryFrame = Holder
     Library.NotificationHistoryContainer = Scroller
@@ -9924,7 +9933,7 @@ function Library:SetNotificationHistoryVisible(Visible: boolean)
         Library.NotificationUnreadCount = 0
         Library:UpdateNotificationBadge()
 
-        local RestPos = Library.NotificationHistoryRestPos or NOTIFY_HISTORY_DEFAULT_POS
+        local RestPos = Library.NotificationHistoryRestPos or GetNotifyHistoryDefaultPos()
         Frame.Position = RestPos + NOTIFY_HISTORY_SLIDE
         Frame.GroupTransparency = 1
         Frame.Visible = true
