@@ -1,3 +1,13 @@
+## 09.08.2026
+
+```diff
+[features]
++ Built-in Notification History: every Library:Notify call is logged automatically, no manual hooking needed
++ Toggle the history panel with the RightAlt keybind (Library.NotificationHistoryKeybind) or Library:ToggleNotificationHistory()
++ Draggable panel lists each notification's timestamp, title and description, newest first
++ Library.NotificationHistory, Library.NotificationHistoryLimit (default 100), Library:GetNotificationHistory(), Library:ClearNotificationHistory(), Library:RefreshNotificationHistory(), Library:SetNotificationHistoryVisible(bool)
+```
+
 ## 05.08.2026
 
 ```diff

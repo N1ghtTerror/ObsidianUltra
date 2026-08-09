@@ -63,6 +63,17 @@ export type Tooltip = {
     Destroy: (self: Tooltip) -> (),
 }
 
+export type NotificationHistoryEntry = {
+    Title: string?,
+    Description: string?,
+    TitleColor: Color3?,
+    DescriptionColor: Color3?,
+    Icon: string?,
+    IconColor: Color3 | string?,
+    Timestamp: number?,
+    TimeString: string?,
+}
+
 export type Notification = {
     Title: string?,
     Description: string,
@@ -1015,6 +1026,11 @@ export type Library = {
     KeybindContainer: Frame?,
     KeybindToggles: { [number]: KeybindToggle },
     Notifications: { [GuiObject]: Notification },
+    NotificationHistory: { NotificationHistoryEntry },
+    NotificationHistoryLimit: number,
+    NotificationHistoryKeybind: Enum.KeyCode?,
+    NotificationHistoryFrame: Frame?,
+    NotificationHistoryContainer: ScrollingFrame?,
     ToggleKeybind: Enum.KeyCode,
     TweenInfo: TweenInfo,
     NotifyTweenInfo: TweenInfo,
@@ -1170,6 +1186,12 @@ export type Library = {
         Time: number?,
         SoundId: string | number?
     ) -> Notification,
+    AddNotificationToHistory: (self: Library, Entry: NotificationHistoryEntry) -> (),
+    GetNotificationHistory: (self: Library) -> { NotificationHistoryEntry },
+    ClearNotificationHistory: (self: Library) -> (),
+    RefreshNotificationHistory: (self: Library) -> (),
+    SetNotificationHistoryVisible: (self: Library, Visible: boolean) -> (),
+    ToggleNotificationHistory: (self: Library) -> (),
     CreateLoading: (self: Library, LoadingInfo: LoadingInfo) -> Loading,
     CreateWindow: (
         self: Library,

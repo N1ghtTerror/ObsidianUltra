@@ -199,6 +199,13 @@ local Library = {
     NotifySide = "Right",
     NotifyTweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 
+    --// Notification History (built-in) \\--
+    NotificationHistory = {},
+    NotificationHistoryLimit = 100,
+    NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
+    NotificationHistoryFrame = nil,
+    NotificationHistoryContainer = nil,
+
     --// Dialogues \\--
     Dialogues = {},
     ActiveDialog = nil,
@@ -9609,7 +9616,185 @@ function Library:Notify(...)
         end
     end)
 
+    --// Record this notification into the built-in history log \\--
+    Library:AddNotificationToHistory({
+        Title = Data.Title,
+        Description = Data.Description,
+        TitleColor = Data.TitleColor,
+        DescriptionColor = Data.DescriptionColor,
+        Icon = Data.Icon,
+        IconColor = Data.IconColor,
+    })
+
     return Data
+end
+
+--// Notification History \\--
+function Library:AddNotificationToHistory(Entry)
+    if typeof(Entry) ~= "table" then
+        return
+    end
+
+    Entry.Timestamp = Entry.Timestamp or os.time()
+    Entry.TimeString = Entry.TimeString or os.date("%H:%M:%S", Entry.Timestamp)
+
+    table.insert(Library.NotificationHistory, 1, Entry)
+
+    local Limit = tonumber(Library.NotificationHistoryLimit) or 100
+    while #Library.NotificationHistory > Limit do
+        table.remove(Library.NotificationHistory)
+    end
+
+    if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
+        Library:RefreshNotificationHistory()
+    end
+end
+
+function Library:GetNotificationHistory()
+    return Library.NotificationHistory
+end
+
+function Library:ClearNotificationHistory()
+    table.clear(Library.NotificationHistory)
+    if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
+        Library:RefreshNotificationHistory()
+    end
+end
+
+function Library:_BuildNotificationHistory()
+    if Library.NotificationHistoryFrame then
+        return
+    end
+
+    local Frame, Container = Library:AddDraggableMenu("Notification History")
+    Frame.Size = UDim2.fromOffset(280, 0)
+    Frame.AnchorPoint = Vector2.new(1, 0.5)
+    Frame.Position = UDim2.new(1, -6, 0.5, 0)
+    Frame.Visible = false
+
+    local Scroller = New("ScrollingFrame", {
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.fromScale(0, 0),
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = "AccentColor",
+        Size = UDim2.fromOffset(266, 300),
+        Parent = Container,
+    })
+    New("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        Parent = Scroller,
+    })
+
+    Library.NotificationHistoryFrame = Frame
+    Library.NotificationHistoryContainer = Scroller
+end
+
+function Library:RefreshNotificationHistory()
+    Library:_BuildNotificationHistory()
+
+    local Scroller = Library.NotificationHistoryContainer
+    for _, Child in Scroller:GetChildren() do
+        if Child:IsA("Frame") then
+            Child:Destroy()
+        end
+    end
+
+    if #Library.NotificationHistory == 0 then
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 24),
+            Text = "No notifications yet.",
+            TextColor3 = "FontColor",
+            TextTransparency = 0.4,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Scroller,
+        })
+        return
+    end
+
+    for _, Entry in Library.NotificationHistory do
+        local Card = New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = "MainColor",
+            Size = UDim2.new(1, 0, 0, 0),
+            Parent = Scroller,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
+                Parent = Card,
+            })
+        )
+        Library:AddOutline(Card)
+        New("UIListLayout", {
+            Padding = UDim.new(0, 2),
+            Parent = Card,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 8),
+            PaddingTop = UDim.new(0, 6),
+            Parent = Card,
+        })
+
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 14),
+            Text = string.format("[%s]", tostring(Entry.TimeString or "")),
+            TextColor3 = "AccentColor",
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Card,
+        })
+
+        if Entry.Title and Entry.Title ~= "nil" then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Text = tostring(Entry.Title),
+                TextColor3 = Entry.TitleColor or "FontColor",
+                TextSize = 15,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Card,
+            })
+        end
+
+        if Entry.Description and Entry.Description ~= "nil" then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Text = tostring(Entry.Description),
+                TextColor3 = Entry.DescriptionColor or "FontColor",
+                TextSize = 14,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Card,
+            })
+        end
+    end
+end
+
+function Library:SetNotificationHistoryVisible(Visible: boolean)
+    Library:_BuildNotificationHistory()
+
+    if Visible then
+        Library:RefreshNotificationHistory()
+    end
+
+    Library.NotificationHistoryFrame.Visible = Visible and true or false
+end
+
+function Library:ToggleNotificationHistory()
+    Library:_BuildNotificationHistory()
+    Library:SetNotificationHistoryVisible(not Library.NotificationHistoryFrame.Visible)
 end
 
 function Library:CreateWindow(WindowInfo)
@@ -14138,6 +14323,10 @@ function Library:CreateWindow(WindowInfo)
         if Input.KeyCode == Library.ToggleKeybind then
             Library:Toggle()
         end
+
+        if Library.NotificationHistoryKeybind and Input.KeyCode == Library.NotificationHistoryKeybind then
+            Library:ToggleNotificationHistory()
+        end
     end))
 
     Library:GiveSignal(UserInputService.WindowFocused:Connect(function()
@@ -14929,6 +15118,7 @@ function Library:Unload()
     table.clear(Library.PillCorners)
 
     table.clear(Library.Notifications)
+    table.clear(Library.NotificationHistory)
     table.clear(Library.Dialogues)
     table.clear(Library.DraggableElements)
     table.clear(Library.KeybindToggles)
@@ -14942,6 +15132,8 @@ function Library:Unload()
     Library.WindowContainer = nil
     Library.KeybindFrame = nil
     Library.KeybindContainer = nil
+    Library.NotificationHistoryFrame = nil
+    Library.NotificationHistoryContainer = nil
 
     getgenv().Library = nil
 end
