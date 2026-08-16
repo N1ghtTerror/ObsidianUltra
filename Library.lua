@@ -6338,10 +6338,13 @@ do
                 ZIndex = Bar.ZIndex + 2,
                 Parent = Bar,
             })
-            New("UICorner", {
-                CornerRadius = UDim.new(1, 0),
-                Parent = InnerOutline,
-            })
+            table.insert(
+                Library.PillCorners,
+                New("UICorner", {
+                    CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
+                    Parent = InnerOutline,
+                })
+            )
             New("UIStroke", {
                 Color = "DarkColor",
                 Transparency = 0.7,
