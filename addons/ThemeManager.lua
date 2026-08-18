@@ -198,7 +198,7 @@ local ThemeManager = {
         },
         ["Evil Hello Kitty"] = {
             38,
-            { FontColor = "ffffff", MainColor = "191919", AccentColor = "f29ac4", BackgroundColor = "0f0f0f", OutlineColor = "282828", BackgroundImage = "" },
+            { FontColor = "ffffff", MainColor = "1c1c1c", AccentColor = "f29ac4", BackgroundColor = "191919", OutlineColor = "1c1c1c", BackgroundImage = "" },
         }
     }
 }
