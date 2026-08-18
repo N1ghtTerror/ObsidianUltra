@@ -195,6 +195,10 @@ local ThemeManager = {
         ["Blush Rose"] = {
             37,
             { FontColor = "fff0f5", MainColor = "2b2026", AccentColor = "ff6fa5", BackgroundColor = "1d151a", OutlineColor = "3a2b33", BackgroundImage = "" },
+        },
+        ["Evil Hello Kitty"] = {
+            38,
+            { FontColor = "ffffff", MainColor = "191919", AccentColor = "f29ac4", BackgroundColor = "0f0f0f", OutlineColor = "282828", BackgroundImage = "" },
         }
     }
 }
